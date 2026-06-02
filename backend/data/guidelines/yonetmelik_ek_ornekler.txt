@@ -1,0 +1,179 @@
+Resmi Yazışmalarda Uygulanacak Usul ve Esaslar Hakkında Yönetmelik
+Ek Belgeler — Şablon Örnekleri ve Yerleşim Açıklamaları
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ÖRNEK 1: Standart Üst Yazı (Resmi Yazı) Düzeni
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Sayfa Yerleşimi:
+- Üst marj: 2,5 cm (GTU uygulamasında 1,5 cm)
+- Sol marj: 2,5 cm (GTU uygulamasında 1,5 cm)
+- Sağ marj: 2,5 cm (GTU uygulamasında 1,5 cm)
+- Alt marj: 2,5 cm
+
+Başlık Bölümü (sayfanın üstünde, ortalanmış):
+  Satır 1: T.C.
+  Satır 2: [KURUM ADI BÜYÜK HARFLE]
+  Satır 3: [BİRİM ADI]
+  (Tüm başlık satırları ortalanmış ve kalın yazılabilir)
+
+Sayı ve Tarih (başlıktan sonra, sol kenar):
+  Sayı: [Dosya/Evrak No]          [Gün].[Ay].[Yıl]
+
+Konu (sayı satırından sonra, sol kenar):
+  Konu: [Yazının konusu — kısa ve öz]
+
+Boş satır
+
+Muhatap (konu satırından sonra):
+  [Alıcı Makam/Kurum Adı]na, (veya)
+  [Alıcı Makam] MAKAMINA,
+
+Boş satır
+
+Metin Bölümü:
+  - Yazı tipi: Times New Roman 12 punto veya Arial 11 punto
+  - Hizalama: İki yana yaslı (justify) önerilir
+  - Satır aralığı: Normal (tek)
+  - Paragraflar arası boşluk bırakılabilir
+
+Boş satır
+
+Kapanış İfadesi:
+  Üst makama: "Arz ederim."
+  Alt makama: "Rica ederim."
+  Karışık durum: "Arz ve rica ederim."
+
+İmza Bloğu (kapanış ifadesinden sonra, sağa yaslı veya ortalanmış):
+  [Ad Soyad]
+  [Unvan]
+
+Sol alt köşe (imzadan sonra):
+  EK: [Ek sayısı]
+  EK-1: [Ek 1 adı]
+  EK-2: [Ek 2 adı]
+
+  DAĞITIM: (varsa)
+  - [Dağıtım 1]
+  - [Dağıtım 2]
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ÖRNEK 3: Onay Yazısı Düzeni
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Onay yazıları, bir makamın başka bir makamın teklifini veya işlemini uygun bulduğunu gösteren yazılardır.
+
+Özellikler:
+- Başlık bölümü standart üst yazı ile aynıdır.
+- Metin, onaylanan konuyu ve gerekçeyi içerir.
+- Kapanış ifadesi olarak "OLUR" kullanılır ("Onay", "Uygundur", "Muvafıktır" kullanılmaz).
+- "OLUR" ifadesi büyük harfle yazılır.
+- İmza bloğu altında onaylayan kişinin adı, soyadı ve unvanı belirtilir.
+- Tarih ve sayı mutlaka bulunur.
+
+Yanlış kullanım:
+  YANLIŞ: "Onay", "Uygundur", "Muvafıktır"
+  DOĞRU: "OLUR"
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ÖRNEK 9: Birden Fazla Sayfalı Belge
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+İki veya daha fazla sayfadan oluşan resmî yazılarda:
+- Sayfa numarası her sayfanın altına ortalanmış olarak yazılır.
+- Birinci sayfada sayfa numarası yazılmayabilir.
+- İkinci ve sonraki sayfalarda sayfa numarası zorunludur.
+- Birinci sayfadaki başlık tekrar edilmez; ikinci sayfadan itibaren yalnızca sayı ve tarih kısaca tekrar edilebilir.
+- Her sayfada aynı marj değerleri korunur.
+- İmza bloğu yalnızca son sayfada yer alır.
+- Eklerin listesi son sayfada imza bloğunun altında bulunur.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ÖRNEK 19/A: Acele İbareli Belge
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Acele veya ivedilikle işlem yapılması gereken yazılarda:
+- Sayfanın üst bölümüne veya "Sayı:" satırının yanına "ACELEDİR" veya "İVEDİ" ibaresi konulur.
+- İbare kırmızı renkte veya büyük harfle yazılabilir.
+- Yazının diğer bölümleri (başlık, metin, imza) standart formata uygun olmalıdır.
+- "Acele" ifadesi gizlilik derecesi gibi işaretlenir, belgenin içeriği değil öncelik derecesini belirtir.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ÖRNEK 19/B: Günlüdür İbareli Belge
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Belirli bir günde teslim edilmesi veya işlem yapılması gereken yazılarda:
+- "GÜNLÜDür" veya "... TARİHİNDE TESLİM EDİLMESİ GEREKMEKTEDİR" ibaresi eklenir.
+- Tarih açıkça belirtilir.
+- Bu ibare yazının önceliğini ve teslim tarihini belirtir.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+KAPANIŞ İFADELERİ TABLOSU
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Doğru kapanış ifadeleri (YÖ-0030 R5 ve Yönetmelik Madde 17 uyarınca):
+
+| Durum                          | Doğru İfade              |
+|-------------------------------|--------------------------|
+| Üst makama (Rektör, Bakan vb.)| Arz ederim               |
+| Alt makama (Dekanlık, Bölüm)  | Rica ederim              |
+| Hem üst hem alt makama        | Arz ve rica ederim       |
+| Bilgi için üst makam          | Bilgilerinize arz ederim |
+| Bilgi için alt makam          | Bilgilerinize rica ederim|
+| Gereği için üst makam         | Gereğini arz ederim      |
+| Gereği için alt makam         | Gereğini rica ederim     |
+| Onay yazılarında              | OLUR                     |
+
+Yasaklı ifadeler:
+- "Saygılarımla arz ederim" — YANLIŞ (resmi yazılarda kullanılmaz)
+- "Derin saygılarımla" — YANLIŞ
+- "Rica olunur" — YANLIŞ
+- "Saygılarımla rica ederim" — YANLIŞ
+- "Onay" — YANLIŞ (onay yazılarında bile yanlış)
+- "Uygundur" — YANLIŞ
+- "Muvafıktır" — YANLIŞ
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+YAZI TİPİ VE PUNTO KURALLARI
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Madde 7 uyarınca font ve punto kuralları:
+
+Kullanılabilecek yazı tipleri:
+1. Times New Roman — 12 punto (metin gövdesi için)
+2. Arial — 11 punto (metin gövdesi için)
+
+Başlık bölümünde (T.C., kurum adı, birim adı):
+- Daha büyük punto kullanılabilir (14pt veya üzeri)
+- Kalın (bold) yazı kullanılabilir
+- Tüm büyük harf (CAPS) kullanılabilir
+
+Dipnot ve açıklama metinleri:
+- Daha küçük punto kullanılabilir (10pt veya 9pt)
+- Ancak yazı tipi Times New Roman veya Arial korunmalıdır
+
+GTU YÖ-0030 R5 Ek Kural:
+- Gebze Teknik Üniversitesi iç yazışmalarında metin gövdesi için Times New Roman 12pt tercih edilir
+- Dipnotlarda Times New Roman 10pt veya Arial 9pt kullanılabilir
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SAYFA DÜZENİ VE MARJ KURALLARI
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Genel Yönetmelik (CBK 2646) — Madde 8:
+- Üst marj: 2,5 cm
+- Alt marj: 2,5 cm
+- Sol marj: 2,5 cm
+- Sağ marj: 2,5 cm
+
+GTU YÖ-0030 R5 — Özel Uygulama:
+- Üst marj: 1,5 cm
+- Sol marj: 1,5 cm
+- Sağ marj: 1,5 cm
+- (GTU kurumsal yönergesi daha dar marj uygulamaktadır)
+
+Hizalama:
+- Metin gövdesi: İki yana yaslı (justify) veya sol hizalı
+- Başlık satırları: Ortalanmış (center)
+- Sayı ve tarih: Sol hizalı veya iki yana yayılı
+- İmza bloğu: Sağ tarafta veya ortalanmış

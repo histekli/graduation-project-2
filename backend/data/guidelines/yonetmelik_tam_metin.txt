@@ -1,0 +1,153 @@
+Resmi Yazışmalarda Uygulanacak Usul ve Esaslar Hakkında Yönetmelik
+Karar Sayısı: 2646 — Resmî Gazete Tarihi: 10 Haziran 2020, Sayı: 31151
+
+BİRİNCİ BÖLÜM
+Amaç, Kapsam, Dayanak ve Tanımlar
+
+Madde 1 - Amaç ve kapsam
+Bu Yönetmeliğin amacı; kamu kurum ve kuruluşlarının resmî yazışmalarında uygulanacak usul ve esasları düzenlemektir. Bu Yönetmelik; Cumhurbaşkanlığı, Türkiye Büyük Millet Meclisi, Anayasa Mahkemesi, Yargıtay, Danıştay, Askeri Yargıtay, Askeri Yüksek İdare Mahkemesi ile diğer yargı organları, üniversiteler ve diğer kamu kurum ve kuruluşlarının yazışmalarında uygulanır.
+
+Madde 2 - Dayanak
+Bu Yönetmelik, 9 Ekim 2003 tarihli ve 4982 sayılı Bilgi Edinme Hakkı Kanunu, 1 Kasım 1984 tarihli ve 3071 sayılı Dilekçe Hakkının Kullanılmasına Dair Kanun ile ilgili diğer mevzuat hükümlerine dayanılarak hazırlanmıştır.
+
+Madde 3 - Tanımlar
+Bu Yönetmelikte geçen;
+a) Resmî yazı: Kurum ve kuruluşların kendi aralarında veya gerçek ve tüzel kişilerle iletişimi sağlamak amacıyla yazılı iletişim kurallarına uygun olarak hazırladıkları belgeyi,
+b) Üst yazı: İki kurum veya kuruluş arasında gönderilen yazıyı,
+c) Elektronik belge: Elektronik ortamda oluşturulan, gönderilen ve saklanan belgeyi,
+d) Güvenli elektronik imza: 5070 sayılı Elektronik İmza Kanununda tanımlanan imzayı
+ifade eder.
+
+İKİNCİ BÖLÜM
+Resmî Yazının Temel Özellikleri
+
+Madde 4 - Genel ilkeler
+Resmî yazılar; açık, anlaşılır, sade bir dil kullanılarak yazılır. Yazılarda Türk Dil Kurumunun Yazım Kılavuzu ve Türkçe Sözlüğü esas alınır. Gereksiz yabancı kelime kullanımından kaçınılır; Türkçe karşılığı bulunan yabancı kelimelere yer verilmez.
+
+Madde 5 - Kâğıt özellikleri
+Resmî yazışmalarda A4 (210x297 mm) boyutundaki beyaz, birinci hamur kâğıt kullanılır. Gerektiğinde A5 (148x210 mm) kâğıt da kullanılabilir. Kâğıdın her iki yüzü de kullanılabilir.
+
+Madde 6 - Resmî yazının bölümleri
+Resmî yazı; üst bölüm (başlık), orta bölüm (metin) ve alt bölüm (imza, ekler, dağıtım) olmak üzere üç ana bölümden oluşur.
+
+Madde 7 - Yazı tipi ve punto büyüklüğü
+Resmî yazılarda "Times New Roman" veya "Arial" yazı tiplerinin kullanılması zorunludur.
+a) Times New Roman kullanılması durumunda punto büyüklüğü 12 olmalıdır.
+b) Arial kullanılması durumunda punto büyüklüğü 11 olmalıdır.
+c) Başlık, konu satırı ve ön yazılarda farklı punto büyüklükleri kullanılabilir; ancak bu durumda Times New Roman veya Arial yazı tipi korunmalıdır.
+d) Dipnot ve açıklama metinlerinde, kullanılan yazı tipini korumak kaydıyla daha küçük punto kullanılabilir.
+
+Madde 8 - Sayfa düzeni ve kenar boşlukları
+a) Resmî yazılarda sayfa düzeni dikey (portre) olarak ayarlanır.
+b) Kenar boşlukları: Üst kenar boşluğu 2,5 cm, alt kenar boşluğu 2,5 cm, sol kenar boşluğu 2,5 cm, sağ kenar boşluğu 2,5 cm olarak belirlenir. Kurum ve kuruluşlar kendi iç yönergeleri ile bu değerleri değiştirebilirler.
+c) Satır aralığı normal olarak ayarlanır; gerektiğinde 1,5 satır aralığı da kullanılabilir.
+d) Metin tek sütun halinde yazılır.
+e) Not: GTU YÖ-0030 R5 Yönergesi gereğince Gebze Teknik Üniversitesinde kenar boşlukları üst 1,5 cm, sol 1,5 cm, sağ 1,5 cm olarak uygulanır.
+
+ÜÇÜNCÜ BÖLÜM
+Resmî Yazının Bölümleri
+
+Madde 9 - Başlık
+a) Başlık; resmî yazının üst bölümünde yer alır ve sayfanın ortasına hizalanır.
+b) Başlıkta sırasıyla şu bilgiler yer alır: T.C. ibaresi, kurumun adı, birimin adı.
+c) "T.C." ibaresi kısaltma olarak kullanılır ve başlığın ilk satırını oluşturur.
+d) İkinci satırda kurumun tam adı büyük harflerle yazılır. Örnek: "GEBZE TEKNİK ÜNİVERSİTESİ REKTÖRLÜĞÜ".
+e) Üçüncü satırda birimin (fakülte, daire, enstitü vb.) adı yer alır.
+f) Başlık satırlarında kalın (bold) yazı kullanılabilir.
+
+Madde 10 - Sayı ve evrak numarası
+a) Sayı; resmî yazının solunda, başlıktan sonra yer alır.
+b) Sayı alanında kurumun dosya planı ve evrak numarası belirtilir.
+c) Sayı formatı: [Birim Kodu]/[Yıl]-[Sıra No] şeklinde düzenlenebilir.
+d) Sayı bilgisi, eş zamanlı yazışmalarda yazışmaları birbirine bağlamak için kullanılır.
+
+Madde 11 - Tarih
+a) Tarih; resmî yazıda sayı ile aynı satırda veya sayının altında yer alır.
+b) Tarih, gün/ay/yıl biçiminde rakamla (ör: 26.05.2025) veya tamamen yazıyla (ör: 26 Mayıs 2025) belirtilir.
+c) Yalnızca yıl bilgisi verilmez; gün ve ay bilgisi de mutlaka yer alır.
+
+Madde 12 - Konu
+a) Konu; resmî yazının ne hakkında olduğunu kısaca belirtir.
+b) "Konu:" ibaresiyle başlar ve yazının içeriğini özetler.
+c) Konu, mümkün olduğunca kısa ve öz olmalıdır; birden fazla konuyu kapsamamalıdır.
+d) Konu, tarih ile muhatap arasında yer alır.
+
+Madde 13 - Muhatap (Alıcı)
+a) Muhatap; yazının gönderildiği makamı belirtir.
+b) Muhatap bilgisi, sayfa ortasına hizalanmış olarak veya yazının sağ tarafında yer alır.
+c) Kurum adı ve unvan büyük harflerle yazılabilir.
+d) Şahsa gönderilen yazılarda unvan ve ad soyad belirtilir.
+
+Madde 14 - İlgi
+a) İlgi; yazının daha önce yazılmış başka bir yazıya, belgeye veya kanun/yönetmelik maddesine atıf yapması durumunda kullanılır.
+b) "İlgi:" ibaresiyle başlar ve mektup harfiyle sıralanır (a), b), c) gibi).
+c) İlgi yazılarda; tarih, sayı ve konu bilgileri belirtilir.
+
+Madde 15 - Metin
+a) Metin; yazının asıl içeriğini oluşturur.
+b) Metinde konu açık ve anlaşılır biçimde açıklanır.
+c) Paragraflar arası boşluk bırakılabilir; paragraf girintisi kullanılabilir.
+d) Cümlelerde özne-yüklem uyumuna dikkat edilir.
+e) Pasif cümle yapısından mümkün olduğunca kaçınılır.
+
+Madde 16 - Metin yapısı ve özellikleri
+a) Resmî yazı metni; giriş, gelişme ve sonuç bölümlerinden oluşur.
+b) Giriş paragrafında yazının amacı belirtilir.
+c) Gelişme bölümünde ayrıntılar açıklanır.
+d) Sonuç paragrafında yapılması istenen eylem veya beklenti belirtilir.
+e) Her konu için ayrı yazı hazırlanması esastır; zorunlu olmadıkça tek yazıda birden fazla konuya yer verilmez.
+
+Madde 17 - İmza
+a) İmza; resmî yazının alt bölümünde, metnin bitiminden sonra yer alır.
+b) İmza bloğunda sırasıyla: kapanış ifadesi, imzalayan kişinin ad ve soyadı, unvanı yer alır.
+c) Kapanış ifadesi olarak; üst makama yazılıyorsa "Arz ederim", alt makama yazılıyorsa "Rica ederim" ifadesi kullanılır. Üst ve alt makama aynı anda yazılıyorsa "Arz ve rica ederim" ifadesi kullanılır.
+d) "Saygılarımla", "Saygılarımla arz ederim" gibi ifadeler resmî yazışmalarda kullanılmaz.
+e) Ad soyad, kalın (bold) yazılabilir; unvan bir satır alta yazılır.
+
+Madde 18 - Onay (Olur)
+a) Onay yazılarında kapanış ifadesi olarak "OLUR" kullanılır.
+b) "Onay", "Uygundur", "Muvafıktır" ifadeleri resmî onay yazılarında kullanılmaz.
+c) "OLUR" ifadesi büyük harflerle yazılır ve imzalayanın adı soyadı ile unvanı eklenir.
+
+Madde 19 - Yetki devri
+a) Amirin yokluğunda imza yetkisi devredilebilir.
+b) Vekâleten veya yetkiyle imzalanan yazılarda "... adına" veya "... Vekili" ibaresi kullanılır.
+c) Rektör adına imzalanıyorsa "Rektör a." ibaresi kullanılır; ardından imzalayanın adı, soyadı ve unvanı yazılır.
+
+DÖRDÜNCÜ BÖLÜM
+Ekler, Dağıtım ve Gizlilik
+
+Madde 20 - Ekler
+a) Ek; resmî yazının içinde bahsedilen ve yazıya iliştirilmiş belgeleri ifade eder.
+b) Ek listesi, imza bloğundan sonra, sol alt köşede yer alır.
+c) "EK:" ibaresiyle başlar ve ekler numaralandırılır (EK-1, EK-2 gibi).
+d) Metinde bahsedilen ek sayısı ile ek listesindeki belge sayısı uyumlu olmalıdır.
+e) "Ekte sunulan 3 belge" deniyor ancak ek listesinde 2 belge varsa bu tutarsızlık hata oluşturur.
+
+Madde 21 - Dağıtım
+a) Dağıtım; yazının birden fazla kuruma veya kişiye gönderilmesi durumunda kullanılır.
+b) "DAĞITIM:" ibaresiyle başlar ve alıcılar listelenir.
+c) Dağıtım listesi, ek listesinin altında veya sayfanın sol alt köşesinde yer alır.
+
+Madde 22 - Gizlilik derecesi
+a) Gizlilik derecesi; yazının ne kadar kısıtlı dağıtılacağını belirtir.
+b) Gizlilik dereceleri: Çok Gizli, Gizli, Hizmete Özel, Tasnif Dışı.
+c) Gizlilik derecesi, yazının üst ve alt ortasına kırmızı renkte büyük harflerle yazılır.
+
+Madde 23 - Sayfa numarası
+a) Birden fazla sayfadan oluşan yazılarda sayfa numarası kullanılır.
+b) Sayfa numarası, her sayfanın altında ortalanmış şekilde yer alır.
+c) Birinci sayfada sayfa numarası yazılmayabilir.
+
+BEŞİNCİ BÖLÜM
+Çeşitli ve Son Hükümler
+
+Madde 24 - Elektronik yazışmalar
+a) Elektronik ortamda yapılan resmî yazışmalarda güvenli elektronik imza kullanılır.
+b) Elektronik yazışmalarda kâğıt yazışmalarla aynı usul ve esaslar uygulanır.
+
+Madde 25 - Yürürlük
+Bu Yönetmelik yayımlandığı tarihte yürürlüğe girer.
+
+Madde 26 - Yürütme
+Bu Yönetmelik hükümlerini Cumhurbaşkanı yürütür.
