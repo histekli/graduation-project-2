@@ -4,9 +4,10 @@ Tespit edilen hataları python-docx ile otomatik olarak düzeltir.
 Düzeltilemeyen hatalar için belgenin sonuna profesyonel bir rapor tablosu ekler.
 
 Otomatik düzeltilebilen kurallar:
-  FMT-001  Font → Times New Roman 12pt  (metin paragrafları)
+  FMT-001  Font → Times New Roman 12pt  (metin paragrafları; miras/tema fontları dahil)
   FMT-002  Marj → 1.5 cm               (üst / sol / sağ)
   LNG-002  Virgül öncesi boşluk kaldır
+  LNG-003  Noktadan sonra boşluk ekle  (≥3 harfli kelimelerden sonra)
   LNG-004  Art arda fazla boşlukları temizle
   CLS-002  Yasaklı kapanış ifadesi → standart ifadeyle değiştir
 """
@@ -29,7 +30,7 @@ from app.models.finding import DocumentSection, Finding, ParsedDocument, Severit
 
 # ── Sabitler ──────────────────────────────────────────────────────────────────
 
-_AUTO_FIXABLE = frozenset({"FMT-001", "FMT-002", "LNG-002", "LNG-004", "CLS-002"})
+_AUTO_FIXABLE = frozenset({"FMT-001", "FMT-002", "LNG-002", "LNG-003", "LNG-004", "CLS-002"})
 
 # Yasaklı kapanış → standart kapanış eşlemesi  (regex pattern → replacement)
 # \.? at the end matches the trailing period that the parser stores with the phrase
@@ -112,7 +113,7 @@ def fix_document(
                      if pp.section == DocumentSection.KAPANIS}
 
     # ── Paragraf bazlı düzeltmeler ──────────────────────────────────────────
-    fmt001 = lng002 = lng004 = cls002 = False
+    fmt001 = lng002 = lng003 = lng004 = cls002 = False
 
     for para in doc.paragraphs:
         stripped = para.text.strip()
@@ -127,8 +128,8 @@ def fix_document(
             if not run.text:
                 continue
 
-            # FMT-001: Font → TNR 12pt
-            if "FMT-001" in fixable_codes and is_metin:
+            # FMT-001: Font → TNR 12pt (metin + kapanis; miras/tema override dahil)
+            if "FMT-001" in fixable_codes and (is_metin or is_kapanis):
                 if _fix_run_font(run):
                     fmt001 = True
 
@@ -148,6 +149,17 @@ def fix_document(
                     lng002 = True
                     original = run.text
 
+            # LNG-003: Noktadan sonra boşluk eksik (≥3 harf olan kelimelerden sonra)
+            if "LNG-003" in fixable_codes:
+                run.text = re.sub(
+                    r"([A-ZÇĞİÖŞÜa-zçğıöşü]{3,})\.([A-ZÇĞİÖŞÜa-zçğıöşü])",
+                    r"\1. \2",
+                    run.text,
+                )
+                if run.text != original:
+                    lng003 = True
+                    original = run.text
+
             # CLS-002: Yasaklı kapanış ifadesi
             if "CLS-002" in fixable_codes and is_kapanis:
                 new_text = _replace_forbidden_closing(run.text)
@@ -159,6 +171,8 @@ def fix_document(
         auto_fixed_codes.append("FMT-001")
     if lng004:
         auto_fixed_codes.append("LNG-004")
+    if lng003:
+        auto_fixed_codes.append("LNG-003")
     if lng002:
         auto_fixed_codes.append("LNG-002")
     if cls002:
@@ -196,13 +210,17 @@ def _fix_margins(doc: Document) -> bool:
 
 
 def _fix_run_font(run) -> bool:
-    """Run fontunu Times New Roman 12pt olarak ayarlar. Değişiklik olursa True döner."""
+    """
+    Run fontunu Times New Roman 12pt olarak ayarlar.
+    None (tema/miras) fontları da dahil — explicit TNR 12pt ile override edilir.
+    """
     allowed = {"Times New Roman", "Arial"}
     name = run.font.name
     size = run.font.size.pt if run.font.size else None
     changed = False
 
-    if name and name not in allowed:
+    # None → miras/tema font; yanlış olabilir, explicit TNR ile ezeriz
+    if name is None or name not in allowed:
         run.font.name = "Times New Roman"
         run.font.size = Pt(12)
         changed = True

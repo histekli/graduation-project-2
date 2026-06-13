@@ -7,6 +7,7 @@ Belge Ayrıştırıcı (Document Parser)
 """
 from __future__ import annotations
 import re
+import logging
 from pathlib import Path
 from docx import Document
 from docx.shared import Pt, Cm, Emu
@@ -16,6 +17,8 @@ from app.models.finding import (
     ParsedDocument, ParsedParagraph, DocumentSection
 )
 from app.rules.hierarchy import FACULTIES, INSTITUTES, DEPARTMENTS
+
+logger = logging.getLogger(__name__)
 
 
 # ── Bölüm tespit kalıpları ──────────────────────────────────────────────
@@ -51,17 +54,117 @@ def _matches_known_unit(text: str) -> bool:
     return any(unit in upper_text for unit in _KNOWN_UNITS_UPPER)
 
 
-def _get_paragraph_font(para) -> tuple[str | None, float | None, bool | None]:
-    """Paragraftaki baskın font adı, boyutu ve kalınlık durumunu döndürür."""
+def _get_doc_default_font(doc: Document) -> tuple[str | None, float | None]:
+    """
+    Belgenin varsayılan font adı ve boyutunu döndürür.
+    Tema referanslarını (minorHAnsi, majorHAnsi) çözümler.
+    Gerçek Word belgelerinde fontlar çoğunlukla stil/tema'dan miras alınır.
+    """
+    try:
+        from docx.oxml.ns import qn
+        from lxml import etree
+
+        font_name: str | None = None
+        size_pt: float | None = None
+
+        # Tema font çözümlemesi için önce tema dosyasını oku
+        minor_font: str | None = None
+        major_font: str | None = None
+        for rel in doc.part.rels.values():
+            if "theme" in rel.reltype:
+                ns = "http://schemas.openxmlformats.org/drawingml/2006/main"
+                theme_xml = etree.fromstring(rel.target_part.blob)
+                fontScheme = theme_xml.find(f".//{{{ns}}}fontScheme")
+                if fontScheme is not None:
+                    minor = fontScheme.find(f"{{{ns}}}minorFont")
+                    major = fontScheme.find(f"{{{ns}}}majorFont")
+                    if minor is not None:
+                        lat = minor.find(f"{{{ns}}}latin")
+                        if lat is not None:
+                            minor_font = lat.get("typeface")
+                    if major is not None:
+                        lat = major.find(f"{{{ns}}}latin")
+                        if lat is not None:
+                            major_font = lat.get("typeface")
+                break
+
+        # docDefaults'tan varsayılan boyut ve font oku
+        styles_el = doc.part.styles._element
+        docDefaults = styles_el.find(qn("w:docDefaults"))
+        if docDefaults is not None:
+            rPrDefault = docDefaults.find(".//" + qn("w:rPrDefault"))
+            if rPrDefault is not None:
+                sz = rPrDefault.find(".//" + qn("w:sz"))
+                if sz is not None:
+                    val = sz.get(qn("w:val"))
+                    if val:
+                        size_pt = int(val) / 2  # yarım nokta → nokta
+
+                rFonts = rPrDefault.find(".//" + qn("w:rFonts"))
+                if rFonts is not None:
+                    ascii_explicit = rFonts.get(qn("w:ascii"))
+                    ascii_theme = rFonts.get(qn("w:asciiTheme")) or ""
+                    if ascii_explicit:
+                        font_name = ascii_explicit
+                    elif "minor" in ascii_theme.lower() and minor_font:
+                        font_name = minor_font
+                    elif "major" in ascii_theme.lower() and major_font:
+                        font_name = major_font
+
+        return font_name, size_pt
+    except Exception as exc:
+        logger.debug("Varsayılan font okunamadı: %s", exc)
+        return None, None
+
+
+def _get_paragraph_font(
+    para,
+    fallback_font: str | None = None,
+    fallback_size: float | None = None,
+) -> tuple[str | None, float | None, bool | None]:
+    """
+    Paragraftaki baskın font adı, boyutu ve kalınlık durumunu döndürür.
+    Run seviyesinde font yoksa (miras/tema durumu) belge varsayılanını kullanır.
+    """
     fonts, sizes, bolds = [], [], []
     for run in para.runs:
-        if run.font.name:
-            fonts.append(run.font.name)
-        if run.font.size:
-            sizes.append(run.font.size.pt)
+        name = run.font.name
+        size = run.font.size
+
+        # Run'da explicit font yoksa karakter stiline bak
+        if name is None and run.style and run.style.font.name:
+            name = run.style.font.name
+        if size is None and run.style and run.style.font.size:
+            size = run.style.font.size
+
+        if name:
+            fonts.append(name)
+        if size:
+            sizes.append(size.pt)
         if run.font.bold is not None:
             bolds.append(run.font.bold)
-    
+
+    # Run'lardan font bulunamazsa paragraf stiline, oradan belge varsayılanına bak
+    if not fonts:
+        s = para.style
+        while s is not None:
+            if s.font.name:
+                fonts.append(s.font.name)
+                break
+            s = s.base_style
+        if not fonts and fallback_font:
+            fonts.append(fallback_font)
+
+    if not sizes:
+        s = para.style
+        while s is not None:
+            if s.font.size:
+                sizes.append(s.font.size.pt)
+                break
+            s = s.base_style
+        if not sizes and fallback_size:
+            sizes.append(fallback_size)
+
     font_name = max(set(fonts), key=fonts.count) if fonts else None
     font_size = max(set(sizes), key=sizes.count) if sizes else None
     is_bold = any(bolds) if bolds else None
@@ -107,18 +210,25 @@ def parse_docx(file_path: str | Path, original_filename: str | None = None) -> P
 
     parsed = ParsedDocument(filename=filename)
     parsed.page_margins = _get_margins(doc)
-    
+
+    # Belge varsayılan fontunu çözümle (miras/tema fontları için)
+    doc_default_font, doc_default_size = _get_doc_default_font(doc)
+
     all_fonts = set()
     all_sizes = set()
     paragraphs: list[ParsedParagraph] = []
-    
+
     # ── İlk geçiş: paragrafları topla ──
     for i, para in enumerate(doc.paragraphs):
         text = para.text.strip()
         if not text:
             continue
-        
-        font_name, font_size, is_bold = _get_paragraph_font(para)
+
+        font_name, font_size, is_bold = _get_paragraph_font(
+            para,
+            fallback_font=doc_default_font,
+            fallback_size=doc_default_size,
+        )
         alignment = _get_alignment_str(para.alignment)
         is_centered = alignment == "center"
         
