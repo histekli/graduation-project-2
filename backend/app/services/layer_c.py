@@ -27,10 +27,11 @@ logger = logging.getLogger(__name__)
 _CONFIG_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "api_config.json"
 
 _RULE_CODE_MAP: dict[str, str] = {
-    "konu_metin": "SEM-001",
-    "ek_metin":   "SEM-002",
-    "mantiksal":  "SEM-003",
-    "anlatim":    "SEM-004",
+    "konu_metin":       "SEM-001",
+    "ek_metin":         "SEM-002",
+    "mantiksal":        "SEM-003",
+    "anlatim":          "SEM-004",
+    "belge_yeterlilik": "SEM-005",
 }
 
 _SEVERITY_MAP: dict[str, Severity] = {
@@ -110,8 +111,18 @@ class LayerC:
 
     # ── Ana giriş noktası ───────────────────────────────────────────────────
 
-    def run(self, doc: ParsedDocument) -> list[Finding]:
-        """Tüm Katman C analizlerini çalıştırır."""
+    def run(
+        self,
+        doc: ParsedDocument,
+        rag_context: list[dict] | None = None,
+    ) -> list[Finding]:
+        """
+        Tüm Katman C analizlerini çalıştırır.
+
+        Args:
+            doc: Ayrıştırılmış belge
+            rag_context: Katman B'den gelen ilgili yönerge chunk'ları (few-shot bağlam)
+        """
         if not self.is_ready:
             logger.warning("Katman C: API anahtarı bulunamadı — atlanıyor.")
             return []
@@ -124,10 +135,13 @@ class LayerC:
         # 1. Deterministik EK-Metin çapraz kontrolü — metin kısa olsa da çalışır
         findings.extend(self._check_ek_references(doc, metin_text))
 
-        # 2. LLM tabanlı analiz — çok kısa metinlerde anlamsız, atla
+        # 2. Deterministik tekrar eden ifade kontrolü
+        findings.extend(self._check_repeated_content(doc, metin_text))
+
+        # 3. LLM tabanlı analiz — çok kısa metinlerde anlamsız, atla
         if len(metin_text.split()) >= 15:
             try:
-                findings.extend(self._run_llm_analysis(doc, metin_text))
+                findings.extend(self._run_llm_analysis(doc, metin_text, rag_context or []))
             except Exception as exc:
                 msg = str(exc)
                 # Kota/ağ hatalarını pipeline'ın yakalayıp raporlayabilmesi için yukarı fırlat
@@ -202,25 +216,112 @@ class LayerC:
 
         return findings
 
+    # ── Deterministik tekrar kontrolü ───────────────────────────────────────
+
+    @staticmethod
+    def _word_overlap(a: str, b: str) -> float:
+        """İki cümle arasındaki sözcük örtüşme oranını hesaplar (0.0–1.0)."""
+        wa = set(a.split())
+        wb = set(b.split())
+        if not wa or not wb:
+            return 0.0
+        return len(wa & wb) / max(len(wa), len(wb))
+
+    def _check_repeated_content(
+        self, doc: ParsedDocument, metin_text: str
+    ) -> list[Finding]:
+        """
+        Metin gövdesinde tekrar eden cümleleri deterministik olarak tespit eder.
+        Hem tam tekrarları hem de yüksek sözcük örtüşmeli (≥85%) cümleleri yakalar.
+        """
+        metin_paras = [
+            pp.text for pp in doc.paragraphs
+            if pp.section == DocumentSection.METIN
+        ]
+        if not metin_paras:
+            return []
+
+        sentences: list[str] = []
+        for text in metin_paras:
+            for sent in re.split(r"(?<=[.!?])\s+", text):
+                cleaned = re.sub(r"\s+", " ", sent.strip().lower())
+                if len(cleaned) >= 30:
+                    sentences.append(cleaned)
+
+        if len(sentences) < 2:
+            return []
+
+        repeated_pairs: list[tuple[str, str]] = []
+        for i in range(len(sentences)):
+            for j in range(i + 1, len(sentences)):
+                if self._word_overlap(sentences[i], sentences[j]) >= 0.85:
+                    repeated_pairs.append((sentences[i], sentences[j]))
+
+        if not repeated_pairs:
+            return []
+
+        first_a, first_b = repeated_pairs[0]
+        return [Finding(
+            id=self._next_id(),
+            layer=Layer.C,
+            severity=Severity.INFO,
+            rule_code="SEM-006",
+            title=f"Tekrar eden ifade ({len(repeated_pairs)} çift)",
+            description=(
+                f"Metin gövdesinde {len(repeated_pairs)} çift birbirine çok benzer "
+                f"cümle veya ifade tespit edildi."
+            ),
+            found=f'"{first_a[:60]}..." ↔ "{first_b[:60]}..."',
+            reference="Resmi yazışma ilkeleri — özlük ve sadelik",
+            suggestion="Tekrar eden ifadeleri kaldırın veya farklı şekilde ifade edin.",
+            confidence=0.92,
+        )]
+
     # ── LLM analizi ─────────────────────────────────────────────────────────
 
     def _run_llm_analysis(
-        self, doc: ParsedDocument, metin_text: str
+        self,
+        doc: ParsedDocument,
+        metin_text: str,
+        rag_context: list[dict] | None = None,
     ) -> list[Finding]:
-        prompt = self._build_prompt(doc, metin_text)
+        prompt = self._build_prompt(doc, metin_text, rag_context or [])
         raw_response = self._call_llm(prompt)
         return self._parse_llm_response(raw_response)
 
-    def _build_prompt(self, doc: ParsedDocument, metin_text: str) -> str:
-        konu   = doc.konu    or "(belirtilmemiş)"
-        muhatap = doc.muhatap or "(belirtilmemiş)"
+    def _build_prompt(
+        self,
+        doc: ParsedDocument,
+        metin_text: str,
+        rag_context: list[dict] | None = None,
+    ) -> str:
+        konu    = doc.konu           or "(belirtilmemiş)"
+        muhatap = doc.muhatap        or "(belirtilmemiş)"
         kapanis = doc.kapanis_phrase or "(belirtilmemiş)"
         ek_str  = "; ".join(doc.ek_list) if doc.ek_list else "(yok)"
 
         # Uzun metinleri kırp (token tasarrufu)
         metin_snippet = metin_text[:2500] if len(metin_text) > 2500 else metin_text
 
-        return f"""Sen Türk resmi yazışma standartları (YÖ-0030, Cumhurbaşkanlığı Yazışma Kılavuzu 2025) konusunda uzman bir denetçisin.
+        # RAG bağlamı: ilgili yönerge maddelerini few-shot olarak ekle
+        rag_block = ""
+        if rag_context:
+            chunks = []
+            seen_texts: set[str] = set()
+            for item in rag_context[:3]:
+                text = (item.get("document") or item.get("content") or "").strip()
+                src  = item.get("metadata", {}).get("source_name", "")
+                if text and text not in seen_texts and len(text) > 50:
+                    seen_texts.add(text)
+                    chunks.append(f"[{src}] {text[:400]}")
+            if chunks:
+                rag_block = (
+                    "\n\nİLGİLİ YÖNERGİ MADDELERİ (referans olarak kullan):\n"
+                    + "\n---\n".join(chunks)
+                    + "\n"
+                )
+
+        return f"""Sen Türk resmi yazışma standartları (YÖ-0030, Cumhurbaşkanlığı Yazışma Kılavuzu 2025) konusunda uzman bir denetçisin.{rag_block}
 
 Aşağıdaki resmi yazıyı analiz et:
 
@@ -233,7 +334,7 @@ METİN:
 KAPANIŞ: {kapanis}
 EK LİSTESİ: {ek_str}
 
-Şu 3 kategoride analiz yap:
+Şu 4 kategoride analiz yap:
 
 1. **KONU-METİN UYUMU (category: "konu_metin", rule_code: "SEM-001")**
    - Konu satırı metnin içeriğini doğru özetliyor mu?
@@ -249,6 +350,11 @@ EK LİSTESİ: {ek_str}
    - Gereksiz edilgen yapı veya anlam belirsizliği var mı?
    - Türkçe resmi yazışma diline uymayan ifadeler var mı?
 
+4. **BELGE YETERLİLİĞİ (category: "belge_yeterlilik", rule_code: "SEM-005")**
+   - Konuda belirtilen amaç metinde yeterince açıklanmış mı?
+   - Gerekli bilgiler (tarih, süre, adet, gerekçe vb.) tam mı?
+   - Okuyucu bilgiden ne yapacağını anlayabiliyor mu?
+
 KURALLAR:
 - SADECE gerçek ve somut sorunları raporla.
 - Sorun yoksa boş JSON dizisi `[]` döndür.
@@ -259,7 +365,7 @@ KURALLAR:
 Yanıtı SADECE aşağıdaki JSON formatında döndür, başka hiçbir metin ekleme:
 [
   {{
-    "category": "konu_metin" | "mantiksal" | "anlatim",
+    "category": "konu_metin" | "mantiksal" | "anlatim" | "belge_yeterlilik",
     "severity": "error" | "warning" | "info",
     "title": "Kısa başlık (en fazla 70 karakter)",
     "description": "Sorunun açık ve somut açıklaması",

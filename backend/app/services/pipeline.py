@@ -86,14 +86,30 @@ class Pipeline:
             all_findings.extend(layer_a_findings)
 
         # 3. Katman B — RAG destekli kontrol
+        rag_context: list[dict] = []
         if mode in ("full", "content_only") and self.layer_b:
             layer_b_findings = self.layer_b.run(parsed)
             all_findings.extend(layer_b_findings)
 
-        # 4. Katman C — Semantik analiz (LLM destekli)
+            # Katman C için few-shot bağlam: konu + metin metnine göre ilgili yönerge chunk'ları
+            if self.layer_b.retriever and self.layer_b.retriever.is_ready:
+                query_parts = [parsed.konu or "", parsed.muhatap or ""]
+                metin_paras = [pp.text for pp in parsed.paragraphs
+                               if pp.section.value == "metin"][:2]
+                query_parts.extend(metin_paras)
+                query = " ".join(p for p in query_parts if p).strip()
+                if query:
+                    try:
+                        rag_context = self.layer_b.retriever.search(
+                            query, n_results=3
+                        )
+                    except Exception as exc:
+                        logger.debug("RAG bağlam çekme başarısız: %s", exc)
+
+        # 4. Katman C — Semantik analiz (LLM destekli, RAG few-shot ile)
         if mode in ("full", "content_only") and self.layer_c.is_ready:
             try:
-                layer_c_findings = self.layer_c.run(parsed)
+                layer_c_findings = self.layer_c.run(parsed, rag_context=rag_context)
                 all_findings.extend(layer_c_findings)
                 self._last_layer_c_error = None
             except Exception as exc:
