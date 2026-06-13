@@ -44,6 +44,7 @@ class Pipeline:
     """Belge analiz pipeline'ı."""
 
     def __init__(self, chroma_dir: str | None = None):
+        self._last_layer_c_error: str | None = None
         self.layer_a = LayerA()
 
         # Katman B: RAG varsa aktif et; yoksa otomatik ingest dene
@@ -91,8 +92,13 @@ class Pipeline:
 
         # 4. Katman C — Semantik analiz (LLM destekli)
         if mode in ("full", "content_only") and self.layer_c.is_ready:
-            layer_c_findings = self.layer_c.run(parsed)
-            all_findings.extend(layer_c_findings)
+            try:
+                layer_c_findings = self.layer_c.run(parsed)
+                all_findings.extend(layer_c_findings)
+                self._last_layer_c_error = None
+            except Exception as exc:
+                self._last_layer_c_error = str(exc)
+                logger.error("Katman C çalıştırılamadı: %s", exc)
 
         # 5. Sonuçları derle
         errors = sum(1 for f in all_findings if f.severity == Severity.ERROR)

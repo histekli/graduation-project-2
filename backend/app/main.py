@@ -74,14 +74,32 @@ def root():
     }
 
 
+def _probe_layer_c_quota() -> str:
+    """Son analiz hatasına bakarak kota durumunu döndürür (API çağrısı yapmaz)."""
+    last_err = getattr(pipeline, "_last_layer_c_error", None)
+    if last_err and ("429" in last_err or "quota" in last_err.lower()):
+        return "quota_exceeded"
+    return "ok"
+
+
 @app.get("/status")
 def get_status():
     """
-    Tüm katmanların ve API anahtarının yapılandırma durumunu döndürür.
-    Gerçek API çağrısı yapmaz — yalnızca konfigürasyon kontrolü.
+    Tüm katmanların durumunu döndürür.
+    Layer C için son analiz hatasını da raporlar (gereksiz API çağrısı yapmadan).
     """
     lc = pipeline.layer_c
     lb = pipeline.layer_b
+
+    c_quota = _probe_layer_c_quota()
+    c_active = lc.is_ready and c_quota != "quota_exceeded"
+
+    if not lc.is_ready:
+        c_detail = "API anahtarı eksik — GEMINI_API_KEY veya ANTHROPIC_API_KEY gerekli"
+    elif c_quota == "quota_exceeded":
+        c_detail = f"Kota dolmuş — {lc.provider}/{lc.model} (farklı hesap veya gece yarısı sıfırlanır)"
+    else:
+        c_detail = f"{lc.provider} / {lc.model}"
 
     return {
         "backend": "ok",
@@ -98,15 +116,12 @@ def get_status():
                 "detail": "ChromaDB hazır" if lb else "ChromaDB bulunamadı",
             },
             "C": {
-                "active": lc.is_ready,
+                "active": c_active,
+                "quota_state": c_quota,
                 "label": "Semantik Analiz (LLM)",
                 "provider": lc.provider if lc.is_ready else None,
                 "model": lc.model if lc.is_ready else None,
-                "detail": (
-                    f"{lc.provider} / {lc.model}"
-                    if lc.is_ready
-                    else "API anahtarı eksik — GEMINI_API_KEY veya ANTHROPIC_API_KEY gerekli"
-                ),
+                "detail": c_detail,
             },
         },
     }
@@ -162,8 +177,8 @@ async def set_api_key(req: ApiKeyRequest):
 @app.get("/check-api-key")
 async def check_api_key():
     """
-    Katman C API anahtarının gerçekten çalışıp çalışmadığını test eder.
-    Minimal bir istek gönderir; sonucu döndürür.
+    Katman C API anahtarının durumunu test eder.
+    Son bilinen kota hatası varsa gereksiz API isteği göndermez.
     """
     lc = pipeline.layer_c
 
@@ -175,9 +190,22 @@ async def check_api_key():
             "error_type": "no_key",
         }
 
+    # Son analiz sırasında kota hatası oluştuysa tekrar istek gönderme
+    last_err = getattr(pipeline, "_last_layer_c_error", None)
+    if last_err and ("429" in last_err or "quota" in last_err.lower() or "resource_exhausted" in last_err.lower()):
+        return {
+            "ok": False,
+            "provider": lc.provider,
+            "model": lc.model,
+            "error": "API kotası aşıldı — anahtar geçerli ama istek limiti dolmuş. Farklı Google hesabı veya gece yarısı sıfırlanır.",
+            "error_type": "quota_exceeded",
+            "tip": "Aynı Google hesabından yeni key oluştursan da kota paylaşılır. Farklı bir Google hesabı oluştur.",
+        }
+
     try:
         test_prompt = "Merhaba. Bu bir bağlantı testidir. Sadece 'OK' yaz."
         response = lc._call_llm(test_prompt)
+        pipeline._last_layer_c_error = None  # Başarılı → temizle
         return {
             "ok": True,
             "provider": lc.provider,
@@ -186,6 +214,7 @@ async def check_api_key():
         }
     except Exception as exc:
         msg = str(exc)
+        pipeline._last_layer_c_error = msg
         # Kota aşımı → anahtar geçerli ama sınır dolmuş
         if "429" in msg or "quota" in msg.lower() or "resource_exhausted" in msg.lower():
             return {
@@ -194,6 +223,7 @@ async def check_api_key():
                 "model": lc.model,
                 "error": "API kotası aşıldı — anahtar geçerli ama istek limiti dolmuş",
                 "error_type": "quota_exceeded",
+                "tip": "Kota key'e değil Google projesine aittir. Aynı hesaptan yeni key açsan da kota paylaşılır. Çözüm: farklı bir Google hesabıyla aistudio.google.com'dan yeni key al.",
             }
         # Geçersiz anahtar
         if "401" in msg or "403" in msg or "api_key" in msg.lower() or "invalid" in msg.lower():

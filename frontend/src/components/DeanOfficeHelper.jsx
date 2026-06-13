@@ -133,22 +133,25 @@ function SystemStatus() {
   const layers = status?.layers;
   const layerC = layers?.C;
 
-  // API key durumu — önce test sonucuna bak, yoksa config'e
-  let apiKeyState = "unknown";  // "ok" | "warning" | false | "unknown"
+  // API key durumu — önce canlı test sonucuna bak, yoksa /status'a
+  // quota_exceeded: key geçerli ama proje limiti dolmuş (sarı)
+  let apiKeyState = "unknown";
   if (apiCheck) {
     if (apiCheck.ok) apiKeyState = "ok";
     else if (apiCheck.error_type === "quota_exceeded") apiKeyState = "warning";
     else apiKeyState = false;
   } else if (layerC) {
-    apiKeyState = layerC.active ? "ok" : false;
+    if (layerC.quota_state === "quota_exceeded") apiKeyState = "warning";
+    else apiKeyState = layerC.active ? "ok" : false;
   }
 
   const apiKeyLabel =
     apiCheck?.ok                                ? `Aktif — ${apiCheck.provider}/${apiCheck.model}` :
-    apiCheck?.error_type === "quota_exceeded"   ? "Kota dolmuş — anahtar geçerli" :
+    apiCheck?.error_type === "quota_exceeded"   ? "Kota dolmuş — anahtar geçerli, limit bitti" :
     apiCheck?.error_type === "invalid_key"      ? "Geçersiz anahtar" :
     apiCheck?.error_type === "no_key"           ? "Yapılandırılmamış" :
     apiCheck?.error                             ? apiCheck.error.slice(0, 60) :
+    layerC?.quota_state === "quota_exceeded"    ? "Kota dolmuş — anahtar geçerli, limit bitti" :
     layerC?.active                              ? `Yapılandırılmış — ${layerC.provider}/${layerC.model}` :
     layerC                                      ? "Yapılandırılmamış" : "—";
 
@@ -295,12 +298,19 @@ function SystemStatus() {
             {/* Test sonucu */}
             {apiCheck && !showKeyForm && (
               <div style={{
-                marginTop: 6, padding: "8px 10px", borderRadius: 6, fontSize: 11,
+                marginTop: 6, padding: "10px 12px", borderRadius: 6, fontSize: 11,
                 background: apiCheck.ok ? "rgba(34,197,94,0.06)" : apiCheck.error_type === "quota_exceeded" ? "rgba(245,158,11,0.06)" : "rgba(239,68,68,0.06)",
                 color: apiCheck.ok ? "#86efac" : apiCheck.error_type === "quota_exceeded" ? "#fcd34d" : "#fca5a5",
-                fontFamily: "monospace", lineHeight: 1.5,
+                lineHeight: 1.6,
               }}>
-                {apiCheck.ok ? `✓ Bağlantı başarılı — "${apiCheck.response_preview}"` : `✗ ${apiCheck.error}`}
+                <div style={{ fontFamily: "monospace" }}>
+                  {apiCheck.ok ? `✓ Bağlantı başarılı — "${apiCheck.response_preview}"` : `✗ ${apiCheck.error}`}
+                </div>
+                {apiCheck.tip && (
+                  <div style={{ marginTop: 6, color: "#94a3b8", fontSize: 10, lineHeight: 1.6 }}>
+                    💡 {apiCheck.tip}
+                  </div>
+                )}
               </div>
             )}
 

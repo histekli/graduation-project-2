@@ -54,7 +54,7 @@ class LayerC:
         self.provider = (provider or os.getenv("LAYER_C_PROVIDER", "gemini")).lower()
 
         _default_model = (
-            "gemini-2.0-flash"
+            "gemini-2.5-flash"
             if self.provider == "gemini"
             else "claude-haiku-4-5-20251001"
         )
@@ -129,6 +129,10 @@ class LayerC:
             try:
                 findings.extend(self._run_llm_analysis(doc, metin_text))
             except Exception as exc:
+                msg = str(exc)
+                # Kota/ağ hatalarını pipeline'ın yakalayıp raporlayabilmesi için yukarı fırlat
+                if any(k in msg for k in ("429", "quota", "RESOURCE_EXHAUSTED", "rate")):
+                    raise
                 logger.error("Katman C LLM analizi başarısız: %s", exc)
 
         return findings

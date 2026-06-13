@@ -19,6 +19,8 @@ from pathlib import Path
 from docx import Document
 from docx.shared import Pt, Cm
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.oxml.ns import qn
+from docx.oxml import OxmlElement
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -50,14 +52,41 @@ def _body(doc, text, font="Times New Roman", pt=12.0) -> None:
     _para(doc, text, font=font, pt=pt, align=WD_ALIGN_PARAGRAPH.JUSTIFY)
 
 
+def _sayi_tarih_row(doc, sayi_no="F.01.2-2025/042", tarih="26.05.2025",
+                    font="Times New Roman", pt=12.0) -> None:
+    """Sayı sol kenarda, Tarih sağ kenarda — right-tab hizalaması ile."""
+    p = doc.add_paragraph()
+    pPr = p._p.get_or_add_pPr()
+    tabs_el = OxmlElement("w:tabs")
+    tab_el = OxmlElement("w:tab")
+    tab_el.set(qn("w:val"), "right")
+    # A4 (21cm) - sol (1.5cm) - sağ (1.5cm) = 18cm metin alanı ≈ 10206 twip
+    tab_el.set(qn("w:pos"), "10206")
+    tabs_el.append(tab_el)
+    pPr.append(tabs_el)
+
+    r1 = p.add_run(f"Sayı: {sayi_no}")
+    r1.font.name = font
+    r1.font.size = Pt(pt)
+
+    rt = p.add_run("\t")
+    rt.font.name = font
+    rt.font.size = Pt(pt)
+
+    r2 = p.add_run(f"Tarih: {tarih}")
+    r2.font.name = font
+    r2.font.size = Pt(pt)
+
+
 def _std_header(doc, birim="Mühendislik Fakültesi",
-                sayi="Sayı: F.01.2-2025/042                    Tarih: 26.05.2025",
+                sayi_no="F.01.2-2025/042",
+                tarih="26.05.2025",
                 konu="Konu: Akademik Faaliyet Raporu",
                 muhatap="Rektörlük Makamına,") -> None:
     _center(doc, "T.C.", bold=True)
     _center(doc, "GEBZE TEKNİK ÜNİVERSİTESİ REKTÖRLÜĞÜ", bold=True)
     _center(doc, birim, bold=True)
-    _para(doc, sayi)
+    _sayi_tarih_row(doc, sayi_no=sayi_no, tarih=tarih)
     _para(doc, konu)
     _para(doc, "")
     _para(doc, muhatap)
@@ -163,7 +192,7 @@ def make_a_missing_tc(path: Path) -> None:
     # T.C. YOK
     _center(doc, "GEBZE TEKNİK ÜNİVERSİTESİ REKTÖRLÜĞÜ", bold=True)
     _center(doc, "Mühendislik Fakültesi", bold=True)
-    _para(doc, "Sayı: F.01.2-2025/042                    Tarih: 26.05.2025")
+    _sayi_tarih_row(doc)
     _para(doc, "Konu: Bölüm Faaliyet Raporu")
     _para(doc, "")
     _para(doc, "Rektörlük Makamına,")
@@ -180,7 +209,7 @@ def make_a_missing_university(path: Path) -> None:
     _center(doc, "T.C.", bold=True)
     # ÜNİVERSİTE ADI YOK
     _center(doc, "Mühendislik Fakültesi", bold=True)
-    _para(doc, "Sayı: F.01.2-2025/042                    Tarih: 26.05.2025")
+    _sayi_tarih_row(doc)
     _para(doc, "Konu: Staj Süreçleri Düzenlemesi")
     _para(doc, "")
     _para(doc, "Rektörlük Makamına,")
@@ -213,7 +242,8 @@ def make_a_wrong_date_format(path: Path) -> None:
     doc = Document()
     _margins(doc)
     _std_header(doc,
-        sayi="Sayı: F.01.2-2025/010                    Tarih: 2025/05/26")
+        sayi_no="F.01.2-2025/010",
+        tarih="2025/05/26")
     _body(doc, "Tarih formatı yanlış yazılmış (YYYY/MM/DD yerine GG.AA.YYYY olmalı).")
     _std_closing(doc)
     _save(doc, path.name)
@@ -477,7 +507,7 @@ def make_b_hir003_ilgi_sirasi_yanlis(path: Path) -> None:
     _center(doc, "T.C.", bold=True)
     _center(doc, "GEBZE TEKNİK ÜNİVERSİTESİ REKTÖRLÜĞÜ", bold=True)
     _center(doc, "Mühendislik Fakültesi", bold=True)
-    _para(doc, "Sayı: F.01.2-2025/099                    Tarih: 26.05.2025")
+    _sayi_tarih_row(doc, sayi_no="F.01.2-2025/099")
     _para(doc, "Konu: Personel Değişikliği")
     _para(doc, "")
     # İlgi satırları ters sırada (yeniden eskiye)
@@ -499,7 +529,7 @@ def make_b_hir003_ilgi_sirasi_dogru(path: Path) -> None:
     _center(doc, "T.C.", bold=True)
     _center(doc, "GEBZE TEKNİK ÜNİVERSİTESİ REKTÖRLÜĞÜ", bold=True)
     _center(doc, "Mühendislik Fakültesi", bold=True)
-    _para(doc, "Sayı: F.01.2-2025/100                    Tarih: 26.05.2025")
+    _sayi_tarih_row(doc, sayi_no="F.01.2-2025/100")
     _para(doc, "Konu: Bölüm Kontenjan Düzenlemesi")
     _para(doc, "")
     # İlgi satırları doğru sırada (eskiden yeniye)
@@ -594,7 +624,7 @@ def make_b_correct_downward(path: Path) -> None:
     _margins(doc)
     _center(doc, "T.C.", bold=True)
     _center(doc, "GEBZE TEKNİK ÜNİVERSİTESİ REKTÖRLÜĞÜ", bold=True)
-    _para(doc, "Sayı: R.01.1-2025/200                    Tarih: 26.05.2025")
+    _sayi_tarih_row(doc, sayi_no="R.01.1-2025/200")
     _para(doc, "Konu: Akreditasyon Belgeleri")
     _para(doc, "")
     _para(doc, "Mühendislik Fakültesi Dekanlığına,")
@@ -774,7 +804,7 @@ def make_mix_missing_fields_and_lang(path: Path) -> None:
     # T.C. yok
     _center(doc, "GEBZE TEKNİK ÜNİVERSİTESİ REKTÖRLÜĞÜ", bold=True)
     _center(doc, "Mühendislik Fakültesi", bold=True)
-    _para(doc, "Sayı: F.01.2-2025/099                    Tarih: 26.05.2025")
+    _sayi_tarih_row(doc, sayi_no="F.01.2-2025/099")
     _para(doc, "Konu: Etkinlik Duyurusu")
     _para(doc, "")
     _para(doc, "Rektörlük Makamına,")
@@ -824,7 +854,7 @@ def make_mix_bolum_dekan_correct(path: Path) -> None:
     _center(doc, "T.C.", bold=True)
     _center(doc, "GEBZE TEKNİK ÜNİVERSİTESİ REKTÖRLÜĞÜ", bold=True)
     _center(doc, "Bilgisayar Mühendisliği Bölümü", bold=True)
-    _para(doc, "Sayı: B.02.1-2025/015                    Tarih: 26.05.2025")
+    _sayi_tarih_row(doc, sayi_no="B.02.1-2025/015")
     _para(doc, "Konu: Ders Programı Değişikliği")
     _para(doc, "")
     _para(doc, "Mühendislik Fakültesi Dekanlığına,")
@@ -844,7 +874,7 @@ def make_mix_rektorluk_daireye_correct(path: Path) -> None:
     _margins(doc)
     _center(doc, "T.C.", bold=True)
     _center(doc, "GEBZE TEKNİK ÜNİVERSİTESİ REKTÖRLÜĞÜ", bold=True)
-    _para(doc, "Sayı: R.01.1-2025/310                    Tarih: 26.05.2025")
+    _sayi_tarih_row(doc, sayi_no="R.01.1-2025/310")
     _para(doc, "Konu: Personel Listesi Talebi")
     _para(doc, "")
     _para(doc, "Personel Dairesi Başkanlığına,")
@@ -867,7 +897,7 @@ def make_mix_ilgili_ekli_complete(path: Path) -> None:
     _center(doc, "T.C.", bold=True)
     _center(doc, "GEBZE TEKNİK ÜNİVERSİTESİ REKTÖRLÜĞÜ", bold=True)
     _center(doc, "Mühendislik Fakültesi", bold=True)
-    _para(doc, "Sayı: F.01.2-2025/150                    Tarih: 26.05.2025")
+    _sayi_tarih_row(doc, sayi_no="F.01.2-2025/150")
     _para(doc, "Konu: Akreditasyon Belgesi Talebi")
     _para(doc, "")
     _para(doc, "İlgi: a) Rektörlüğün 03.02.2025 tarih ve 012 sayılı yazısı.")
@@ -936,7 +966,7 @@ def make_ok_daire_rektorluk(path: Path) -> None:
     _center(doc, "T.C.", bold=True)
     _center(doc, "GEBZE TEKNİK ÜNİVERSİTESİ REKTÖRLÜĞÜ", bold=True)
     _center(doc, "Personel Dairesi Başkanlığı", bold=True)
-    _para(doc, "Sayı: P.01.3-2025/055                    Tarih: 26.05.2025")
+    _sayi_tarih_row(doc, sayi_no="P.01.3-2025/055")
     _para(doc, "Konu: Kadro Cetvelini Güncellemesi")
     _para(doc, "")
     _para(doc, "Rektörlük Makamına,")

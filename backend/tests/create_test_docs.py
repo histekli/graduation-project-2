@@ -12,6 +12,8 @@ from pathlib import Path
 from docx import Document
 from docx.shared import Pt, Cm
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.oxml.ns import qn
+from docx.oxml import OxmlElement
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -50,17 +52,44 @@ def _body(doc: Document, text: str, font: str = "Times New Roman", pt: float = 1
     _para(doc, text, font=font, pt=pt, align=WD_ALIGN_PARAGRAPH.JUSTIFY)
 
 
+def _sayi_tarih_row(doc: Document, sayi_no: str = "F.01.2-2025/001",
+                    tarih: str = "26.05.2025",
+                    font: str = "Times New Roman", pt: float = 12.0) -> None:
+    """Sayı sol kenarda, Tarih sağ kenarda — right-tab hizalaması ile."""
+    p = doc.add_paragraph()
+    pPr = p._p.get_or_add_pPr()
+    tabs_el = OxmlElement("w:tabs")
+    tab_el = OxmlElement("w:tab")
+    tab_el.set(qn("w:val"), "right")
+    tab_el.set(qn("w:pos"), "10206")  # 18 cm ≈ 10206 twip (A4 - 1.5cm*2)
+    tabs_el.append(tab_el)
+    pPr.append(tabs_el)
+
+    r1 = p.add_run(f"Sayı: {sayi_no}")
+    r1.font.name = font
+    r1.font.size = Pt(pt)
+
+    rt = p.add_run("\t")
+    rt.font.name = font
+    rt.font.size = Pt(pt)
+
+    r2 = p.add_run(f"Tarih: {tarih}")
+    r2.font.name = font
+    r2.font.size = Pt(pt)
+
+
 def _standard_header(
     doc: Document,
     birim: str = "Mühendislik Fakültesi",
-    sayi: str = "Sayı: F.01.2-2025/001                                           Tarih: 26.05.2025",
+    sayi_no: str = "F.01.2-2025/001",
+    tarih: str = "26.05.2025",
     konu: str = "Konu: Akademik Faaliyet Raporu",
     muhatap: str = "Rektörlük Makamına,",
 ) -> None:
     _center(doc, "T.C.", bold=True)
     _center(doc, "GEBZE TEKNİK ÜNİVERSİTESİ REKTÖRLÜĞÜ", bold=True)
     _center(doc, birim, bold=True)
-    _para(doc, sayi)
+    _sayi_tarih_row(doc, sayi_no=sayi_no, tarih=tarih)
     _para(doc, konu)
     _para(doc, "")
     _para(doc, muhatap)
@@ -126,7 +155,7 @@ def make_missing_fields(path: Path) -> None:
     # T.C. YOK — FLD-001
     _center(doc, "GEBZE TEKNİK ÜNİVERSİTESİ REKTÖRLÜĞÜ", bold=True)
     _center(doc, "Mühendislik Fakültesi", bold=True)
-    _para(doc, "Sayı: F.01.2-2025/042                                           Tarih: 26.05.2025")
+    _sayi_tarih_row(doc)
     # KONU YOK — FLD-006
     _para(doc, "")
     _para(doc, "Rektörlük Makamına,")
