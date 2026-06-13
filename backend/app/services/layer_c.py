@@ -309,8 +309,8 @@ class LayerC:
             chunks = []
             seen_texts: set[str] = set()
             for item in rag_context[:3]:
-                text = (item.get("document") or item.get("content") or "").strip()
-                src  = item.get("metadata", {}).get("source_name", "")
+                text = (item.get("text") or item.get("document") or item.get("content") or "").strip()
+                src  = item.get("metadata", {}).get("source", item.get("metadata", {}).get("source_name", ""))
                 if text and text not in seen_texts and len(text) > 50:
                     seen_texts.add(text)
                     chunks.append(f"[{src}] {text[:400]}")

@@ -543,6 +543,40 @@ class LayerA:
                             suggestion="Noktadan sonra bir boşluk bırakın.",
                         ))
 
+            # Virgül/noktalı virgülden sonra boşluk eksik
+            # Kural: "noktalama işaretlerinden sonra bir harf boşluğu ara verilir"
+            # TDK Yazım Kılavuzu — Noktalama İşaretleri (Açıklamalar)
+            # Resmi yazışmalarda URL, sayısal ifade vb. false-positive'leri dışla
+            punct_no_space = re.findall(
+                r"([A-ZÇĞİÖŞÜa-zçğıöşü]{2,})"  # kelime (≥2 harf)
+                r"([,;])"                         # virgül veya noktalı virgül
+                r"([A-ZÇĞİÖŞÜa-zçğıöşü])",      # hemen ardından harf (boşluk yok)
+                text,
+            )
+            if punct_no_space:
+                before, punct, after = punct_no_space[0]
+                findings.append(Finding(
+                    id=self._next_id(),
+                    layer=Layer.A,
+                    severity=Severity.INFO,
+                    rule_code="LNG-005",
+                    title="Noktalama işaretinden sonra boşluk eksik",
+                    description=(
+                        f"'{before}{punct}{after}...' — "
+                        f"{'Virgül' if punct == ',' else 'Noktalı virgül'}'den "
+                        f"sonra boşluk bırakılmamış."
+                    ),
+                    location=FindingLocation(
+                        paragraph=pp.index,
+                        text_snippet=text[:80],
+                    ),
+                    reference="TDK Yazım Kılavuzu - Noktalama İşaretleri",
+                    suggestion=(
+                        f"{'Virgül' if punct == ',' else 'Noktalı virgül'}'den "
+                        f"sonra bir boşluk bırakın."
+                    ),
+                ))
+
             # ── Gereksiz boşluklar ──
             if re.search(r"  +", text):
                 findings.append(Finding(

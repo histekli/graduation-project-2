@@ -82,20 +82,43 @@ def _detect_source_info(path: Path) -> tuple[str, str] | None:
 # ── Metin parçalama ───────────────────────────────────────────────────────────
 
 def _chunk_text(text: str, chunk_size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP) -> list[str]:
-    """Metni paragraf sınırlarına saygı göstererek chunk'lara ayırır."""
-    paragraphs = re.split(r'\n\s*\n', text)
+    """
+    Metni paragraf sınırlarına saygı göstererek chunk'lara ayırır.
+
+    İki geçiş:
+    1. Önce çift satır sonu (\\n\\n) ile büyük bölümlere ayır.
+    2. Büyük bölümler hâlâ chunk_size'ı aşıyorsa tek satır sonlarına (\\n) göre
+       daha küçük parçalara böl. Bu, TDK'nın dev "Noktalama İşaretleri" bölümü
+       gibi \\n\\n içermeyen uzun metinleri doğru biçimde işler.
+    """
+    # 1. geçiş: çift satır sonlarına göre bölümle
+    coarse = re.split(r'\n\s*\n', text)
+
+    # 2. geçiş: chunk_size'ı aşan bölümleri tek satır sonlarına göre böl
+    units: list[str] = []
+    for block in coarse:
+        block = block.strip()
+        if not block:
+            continue
+        if len(block) > chunk_size:
+            for line in block.split('\n'):
+                line = line.strip()
+                if line:
+                    units.append(line)
+        else:
+            units.append(block)
+
+    # Birimlerden chunk'lar oluştur
     chunks: list[str] = []
     current = ""
 
-    for para in paragraphs:
-        para = para.strip()
-        if not para:
-            continue
-        if len(current) + len(para) + 2 > chunk_size and current:
+    for unit in units:
+        if len(current) + len(unit) + 2 > chunk_size and current:
             chunks.append(current.strip())
-            current = current[-overlap:] + "\n\n" + para if overlap and len(current) > overlap else para
+            tail = current[-overlap:] if overlap and len(current) > overlap else ""
+            current = (tail + "\n\n" + unit).strip() if tail else unit
         else:
-            current = current + "\n\n" + para if current else para
+            current = (current + "\n\n" + unit).strip() if current else unit
 
     if current.strip():
         chunks.append(current.strip())

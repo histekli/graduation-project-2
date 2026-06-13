@@ -9,6 +9,7 @@ Otomatik düzeltilebilen kurallar:
   LNG-002  Virgül öncesi boşluk kaldır
   LNG-003  Noktadan sonra boşluk ekle  (≥3 harfli kelimelerden sonra)
   LNG-004  Art arda fazla boşlukları temizle
+  LNG-005  Virgül/noktalı virgülden sonra boşluk ekle
   CLS-002  Yasaklı kapanış ifadesi → standart ifadeyle değiştir
 """
 from __future__ import annotations
@@ -30,7 +31,7 @@ from app.models.finding import DocumentSection, Finding, ParsedDocument, Severit
 
 # ── Sabitler ──────────────────────────────────────────────────────────────────
 
-_AUTO_FIXABLE = frozenset({"FMT-001", "FMT-002", "LNG-002", "LNG-003", "LNG-004", "CLS-002"})
+_AUTO_FIXABLE = frozenset({"FMT-001", "FMT-002", "LNG-002", "LNG-003", "LNG-004", "LNG-005", "CLS-002"})
 
 # Yasaklı kapanış → standart kapanış eşlemesi  (regex pattern → replacement)
 # \.? at the end matches the trailing period that the parser stores with the phrase
@@ -113,7 +114,7 @@ def fix_document(
                      if pp.section == DocumentSection.KAPANIS}
 
     # ── Paragraf bazlı düzeltmeler ──────────────────────────────────────────
-    fmt001 = lng002 = lng003 = lng004 = cls002 = False
+    fmt001 = lng002 = lng003 = lng004 = lng005 = cls002 = False
 
     for para in doc.paragraphs:
         stripped = para.text.strip()
@@ -160,6 +161,17 @@ def fix_document(
                     lng003 = True
                     original = run.text
 
+            # LNG-005: Virgül/noktalı virgülden sonra boşluk eksik
+            if "LNG-005" in fixable_codes:
+                run.text = re.sub(
+                    r"([A-ZÇĞİÖŞÜa-zçğıöşü]{2,})([,;])([A-ZÇĞİÖŞÜa-zçğıöşü])",
+                    r"\1\2 \3",
+                    run.text,
+                )
+                if run.text != original:
+                    lng005 = True
+                    original = run.text
+
             # CLS-002: Yasaklı kapanış ifadesi
             if "CLS-002" in fixable_codes and is_kapanis:
                 new_text = _replace_forbidden_closing(run.text)
@@ -171,6 +183,8 @@ def fix_document(
         auto_fixed_codes.append("FMT-001")
     if lng004:
         auto_fixed_codes.append("LNG-004")
+    if lng005:
+        auto_fixed_codes.append("LNG-005")
     if lng003:
         auto_fixed_codes.append("LNG-003")
     if lng002:
