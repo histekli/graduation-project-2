@@ -222,14 +222,16 @@ def make_semantic_issues(path: Path) -> None:
 # ── Belge 6: Dil/yazım hataları (LNG-001, LNG-002, LNG-003, CLS-002) ─────────
 
 def make_language_errors(path: Path) -> None:
-    """Cümle başı küçük harf, virgül öncesi boşluk, noktadan sonra boşluk yok, yasaklı kapanış."""
+    """LNG-001..005 ve CLS-002 hatalarını içeren test belgesi."""
     doc = Document()
     _margins(doc, 1.5)
     _standard_header(doc)
     # LNG-001: cümle sonrası küçük harfle devam
     _body(doc, "Belge incelenmiştir. bu konuda gerekli işlemler yapılacaktır.")
-    # LNG-002: virgül öncesi boşluk
+    # LNG-002: virgül öncesi boşluk + LNG-005: virgül sonrası boşluk yok (aynı anda)
     _body(doc, "Söz konusu durum ,ilgili birimlerle paylaşılmıştır.")
+    # LNG-005 (net örnek): virgülden sonra hiç boşluk yok
+    _body(doc, "Evraklar tamamlanmış,inceleme süreci başlatılmıştır.")
     # LNG-003: noktadan sonra boşluk yok
     _body(doc, "Raporlar hazırlanmıştır.Sonuçlar değerlendirilecektir.")
     # LNG-004: art arda boşluk

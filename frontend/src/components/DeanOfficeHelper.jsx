@@ -554,6 +554,14 @@ const PIPELINE_STEPS = [
 // Step timing (ms): how long to stay on each step before advancing
 const STEP_DELAYS = [1400, 2200, 3500];   // step 1→2, 2→3, 3→4
 
+// Download steps
+const DOWNLOAD_STEPS = [
+  { n: 1, label: "Belge yeniden analiz ediliyor",    desc: "Düzeltilecek konumlar belirleniyor" },
+  { n: 2, label: "Hatalar otomatik düzeltiliyor",    desc: "Font · boşluk · yazım · kapanış" },
+  { n: 3, label: "İndirme dosyası hazırlanıyor",     desc: "Düzeltilmiş .docx oluşturuluyor" },
+];
+const DOWNLOAD_STEP_DELAYS = [2000, 4000]; // 1→2, 2→3
+
 // ── Main App ──────────────────────────────────────────────────────────────────
 
 export default function App() {
@@ -565,10 +573,12 @@ export default function App() {
   const [error, setError]             = useState(null);
   const [mode, setMode]               = useState("full");
   const [priority, setPriority]       = useState("all");
-  const [currentStep, setCurrentStep] = useState(0);  // 0=idle, 1-4=active, 5=done
-  const inputRef    = useRef(null);
-  const abortRef    = useRef(null);
-  const stepTimers  = useRef([]);
+  const [currentStep, setCurrentStep]       = useState(0);  // 0=idle, 1-4=active, 5=done
+  const [downloadStep, setDownloadStep]     = useState(0);  // 0=idle, 1-3=active
+  const inputRef       = useRef(null);
+  const abortRef       = useRef(null);
+  const stepTimers     = useRef([]);
+  const downloadTimers = useRef([]);
 
   const handleFile = useCallback((f) => {
     if (!f) return;
@@ -627,9 +637,24 @@ export default function App() {
     setError(null);
   }, [clearStepTimers]);
 
+  const clearDownloadTimers = useCallback(() => {
+    downloadTimers.current.forEach(t => clearTimeout(t));
+    downloadTimers.current = [];
+  }, []);
+
   const downloadFixed = useCallback(async () => {
     if (!file || !results || downloading) return;
     setDownloading(true); setError(null);
+
+    // Kick off download step animation
+    setDownloadStep(1);
+    clearDownloadTimers();
+    let acc = 0;
+    downloadTimers.current = DOWNLOAD_STEP_DELAYS.map((delay, i) => {
+      acc += delay;
+      return setTimeout(() => setDownloadStep(i + 2), acc);
+    });
+
     const controller = new AbortController();
     const tid = setTimeout(() => controller.abort("timeout"), REQUEST_TIMEOUT_MS);
     try {
@@ -638,17 +663,21 @@ export default function App() {
       const res = await fetch(`${API_BASE}/analyze-and-fix?mode=${encodeURIComponent(mode)}`, { method: "POST", body: formData, signal: controller.signal });
       if (!res.ok) { let d = `HTTP ${res.status}`; try { const j = await res.json(); d = j.detail || d; } catch { } throw new Error(d); }
       const blob = await res.blob();
+      clearDownloadTimers();
+      setDownloadStep(0);
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url; a.download = `${file.name.replace(/\.docx$/i, "")}_duzeltilmis.docx`;
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch (err) {
+      clearDownloadTimers();
+      setDownloadStep(0);
       if (err.name === "AbortError" || err.message === "timeout") setError("İndirme zaman aşımına uğradı.");
       else if (err.message?.includes("Failed to fetch")) setError(`Backend'e bağlanılamadı.`);
       else setError(err.message || "İndirme sırasında hata oluştu.");
     } finally { clearTimeout(tid); setDownloading(false); }
-  }, [file, mode, results, downloading]);
+  }, [file, mode, results, downloading, clearDownloadTimers]);
 
   const filteredFindings = (results?.findings ?? []).filter(f => priority === "all" || f.severity === priority);
 
@@ -862,19 +891,65 @@ export default function App() {
               📄 {results.filename}
             </div>
 
-            {/* Download button */}
-            <button onClick={downloadFixed} disabled={downloading} style={{
-              display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
-              width: "100%", padding: "13px 20px", borderRadius: 10, border: "none",
-              background: downloading ? "rgba(255,255,255,0.05)" : "linear-gradient(135deg, #22c55e 0%, #15803d 100%)",
-              color: downloading ? "#475569" : "#fff", fontSize: 14, fontWeight: 700,
-              cursor: downloading ? "not-allowed" : "pointer", fontFamily: "inherit", marginBottom: 24,
-              boxShadow: downloading ? "none" : "0 4px 14px rgba(34,197,94,0.25)",
-            }}>
-              {downloading ? (
-                <><span style={{ width: 16, height: 16, border: "2px solid rgba(71,85,105,0.4)", borderTopColor: "#64748b", borderRadius: "50%", animation: "spin 0.8s linear infinite", display: "inline-block" }} />Düzeltilmiş belge hazırlanıyor…</>
-              ) : (<><span style={{ fontSize: 18 }}>↓</span> Düzeltilmiş Belgeyi İndir</>)}
-            </button>
+            {/* Download button + inline progress */}
+            <div style={{ marginBottom: 24 }}>
+              <button onClick={downloadFixed} disabled={downloading} style={{
+                display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
+                width: "100%", padding: "13px 20px", borderRadius: downloading ? "10px 10px 0 0" : 10, border: "none",
+                background: downloading ? "rgba(34,197,94,0.06)" : "linear-gradient(135deg, #22c55e 0%, #15803d 100%)",
+                color: downloading ? "#4ade80" : "#fff", fontSize: 14, fontWeight: 700,
+                cursor: downloading ? "not-allowed" : "pointer", fontFamily: "inherit",
+                boxShadow: downloading ? "none" : "0 4px 14px rgba(34,197,94,0.25)",
+                borderBottom: downloading ? "none" : undefined,
+                transition: "all 0.2s",
+              }}>
+                {downloading ? (
+                  <><span style={{ width: 16, height: 16, border: "2px solid rgba(74,222,128,0.3)", borderTopColor: "#4ade80", borderRadius: "50%", animation: "spin 0.8s linear infinite", display: "inline-block" }} />
+                  {downloadStep >= 1 ? DOWNLOAD_STEPS[downloadStep - 1]?.label ?? "İndiriliyor…" : "Hazırlanıyor…"}…</>
+                ) : (<><span style={{ fontSize: 18 }}>↓</span> Düzeltilmiş Belgeyi İndir</>)}
+              </button>
+
+              {/* Download step progress panel */}
+              {downloading && (
+                <div style={{
+                  border: "1px solid rgba(34,197,94,0.2)", borderTop: "none",
+                  borderRadius: "0 0 10px 10px",
+                  background: "rgba(34,197,94,0.03)", padding: "10px 14px",
+                  display: "flex", flexDirection: "column", gap: 6,
+                }}>
+                  {DOWNLOAD_STEPS.map((s, i) => {
+                    const stepNum = i + 1;
+                    const isDone = downloadStep > stepNum;
+                    const isActive = downloadStep === stepNum;
+                    return (
+                      <div key={i} style={{
+                        display: "flex", alignItems: "center", gap: 8,
+                        opacity: !isDone && !isActive ? 0.3 : 1,
+                        transition: "opacity 0.3s ease",
+                      }}>
+                        <div style={{
+                          width: 18, height: 18, borderRadius: 5, flexShrink: 0,
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          fontSize: 10, fontWeight: 700,
+                          background: isDone ? "rgba(34,197,94,0.15)" : isActive ? "rgba(34,197,94,0.12)" : "rgba(255,255,255,0.04)",
+                          color: isDone ? "#4ade80" : isActive ? "#22c55e" : "#475569",
+                          border: `1px solid ${isDone ? "rgba(34,197,94,0.3)" : isActive ? "rgba(34,197,94,0.25)" : "rgba(255,255,255,0.06)"}`,
+                          ...(isActive ? { animation: "pulse 1.5s ease infinite" } : {}),
+                        }}>
+                          {isDone ? "✓" : s.n}
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 11, fontWeight: 600, color: isDone ? "#64748b" : isActive ? "#86efac" : "#475569" }}>
+                            {s.label}
+                          </div>
+                          <div style={{ fontSize: 10, color: "#334155" }}>{s.desc}</div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
 
             {/* Stats */}
             <div style={{ display: "flex", gap: 14, marginBottom: 24, flexWrap: "wrap" }}>

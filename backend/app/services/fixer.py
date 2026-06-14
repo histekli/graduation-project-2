@@ -6,6 +6,7 @@ Düzeltilemeyen hatalar için belgenin sonuna profesyonel bir rapor tablosu ekle
 Otomatik düzeltilebilen kurallar:
   FMT-001  Font → Times New Roman 12pt  (metin paragrafları; miras/tema fontları dahil)
   FMT-002  Marj → 1.5 cm               (üst / sol / sağ)
+  LNG-001  Cümle başı büyük harf        (noktadan sonra gelen küçük harfler)
   LNG-002  Virgül öncesi boşluk kaldır
   LNG-003  Noktadan sonra boşluk ekle  (≥3 harfli kelimelerden sonra)
   LNG-004  Art arda fazla boşlukları temizle
@@ -31,7 +32,10 @@ from app.models.finding import DocumentSection, Finding, ParsedDocument, Severit
 
 # ── Sabitler ──────────────────────────────────────────────────────────────────
 
-_AUTO_FIXABLE = frozenset({"FMT-001", "FMT-002", "LNG-002", "LNG-003", "LNG-004", "LNG-005", "CLS-002"})
+_AUTO_FIXABLE = frozenset({"FMT-001", "FMT-002", "LNG-001", "LNG-002", "LNG-003", "LNG-004", "LNG-005", "CLS-002"})
+
+# Türkçe özel büyük harf dönüşümü: Python .upper() 'i'→'I' yapar, Türkçe'de 'İ' olmalı
+_TR_UPPER = str.maketrans("iı", "İI")
 
 # Yasaklı kapanış → standart kapanış eşlemesi  (regex pattern → replacement)
 # \.? at the end matches the trailing period that the parser stores with the phrase
@@ -114,7 +118,7 @@ def fix_document(
                      if pp.section == DocumentSection.KAPANIS}
 
     # ── Paragraf bazlı düzeltmeler ──────────────────────────────────────────
-    fmt001 = lng002 = lng003 = lng004 = lng005 = cls002 = False
+    fmt001 = lng001 = lng002 = lng003 = lng004 = lng005 = cls002 = False
 
     for para in doc.paragraphs:
         stripped = para.text.strip()
@@ -124,6 +128,11 @@ def fix_document(
         is_kapanis = stripped in kapanis_texts
         if not (is_metin or is_kapanis):
             continue
+
+        # LNG-001: Cümle başı büyük harf (paragraf düzeyinde, run sınırlarını korur)
+        if "LNG-001" in fixable_codes and is_metin:
+            if _fix_sentence_case_para(para):
+                lng001 = True
 
         for run in para.runs:
             if not run.text:
@@ -162,10 +171,11 @@ def fix_document(
                     original = run.text
 
             # LNG-005: Virgül/noktalı virgülden sonra boşluk eksik
+            # Basit regex: [,;] hemen ardından harf geliyorsa boşluk ekle
             if "LNG-005" in fixable_codes:
                 run.text = re.sub(
-                    r"([A-ZÇĞİÖŞÜa-zçğıöşü]{2,})([,;])([A-ZÇĞİÖŞÜa-zçğıöşü])",
-                    r"\1\2 \3",
+                    r"([,;])([A-ZÇĞİÖŞÜa-zçğıöşü])",
+                    r"\1 \2",
                     run.text,
                 )
                 if run.text != original:
@@ -181,6 +191,8 @@ def fix_document(
 
     if fmt001:
         auto_fixed_codes.append("FMT-001")
+    if lng001:
+        auto_fixed_codes.append("LNG-001")
     if lng004:
         auto_fixed_codes.append("LNG-004")
     if lng005:
@@ -207,6 +219,50 @@ def fix_document(
 
 
 # ── Düzeltme yardımcıları ─────────────────────────────────────────────────────
+
+def _fix_sentence_case_para(para) -> bool:
+    """
+    Paragraf içinde cümle başı büyük harf düzeltmesi.
+    Run sınırlarını koruyarak karakter bazlı eşleştirme yapar.
+    Türkçe 'i' → 'İ' dönüşümünü doğru uygular.
+    """
+    runs = para.runs
+    if not runs:
+        return False
+
+    # Karakter → (run_idx, char_in_run) eşlemesi
+    char_map: list[tuple[int, int]] = []
+    for run_idx, run in enumerate(runs):
+        for ci in range(len(run.text)):
+            char_map.append((run_idx, ci))
+
+    combined = "".join(r.text for r in runs)
+    if not combined:
+        return False
+
+    # Noktadan (.!?) sonra gelen küçük harflerin konumlarını bul
+    fix_positions: list[int] = []
+    for m in re.finditer(r'(?<=[.!?])\s+([a-zçğıöşü])', combined):
+        fix_positions.append(m.start(1))
+
+    if not fix_positions:
+        return False
+
+    changed = False
+    for pos in fix_positions:
+        if pos >= len(char_map):
+            continue
+        run_idx, ci = char_map[pos]
+        run = runs[run_idx]
+        text = list(run.text)
+        upper_char = text[ci].upper().translate(_TR_UPPER)
+        if upper_char != text[ci]:
+            text[ci] = upper_char
+            run.text = "".join(text)
+            changed = True
+
+    return changed
+
 
 def _fix_margins(doc: Document) -> bool:
     """Tüm bölümlerin marjlarını 1.5 cm'ye çeker. Değişiklik olursa True döner."""
