@@ -325,7 +325,7 @@ function SystemStatus() {
                   SAĞLAYICI
                 </div>
                 <div style={{ display: "flex", gap: 6 }}>
-                  {["gemini", "claude"].map(p => (
+                  {["gemini", "groq"].map(p => (
                     <button
                       key={p}
                       onClick={() => setProvider(p)}
@@ -338,7 +338,7 @@ function SystemStatus() {
                         transition: "all 0.15s",
                       }}
                     >
-                      {p === "gemini" ? "Google Gemini" : "Anthropic Claude"}
+                      {p === "gemini" ? "Google Gemini" : "Groq / Llama"}
                     </button>
                   ))}
                 </div>
@@ -350,7 +350,7 @@ function SystemStatus() {
                   value={keyInput}
                   onChange={e => setKeyInput(e.target.value)}
                   onKeyDown={e => e.key === "Enter" && saveApiKey()}
-                  placeholder={providerInput === "gemini" ? "AIzaSy…" : "sk-ant-…"}
+                  placeholder={providerInput === "gemini" ? "AIzaSy…" : "gsk_…"}
                   style={{
                     padding: "9px 12px", borderRadius: 7, fontSize: 12,
                     background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)",
@@ -361,7 +361,7 @@ function SystemStatus() {
                 <div style={{ fontSize: 10, color: "#475569", lineHeight: 1.5 }}>
                   {providerInput === "gemini"
                     ? "aistudio.google.com/app/apikey adresinden ücretsiz alınabilir"
-                    : "console.anthropic.com adresinden alınabilir"}
+                    : "console.groq.com adresinden ücretsiz alınabilir"}
                 </div>
                 <div style={{ display: "flex", gap: 6 }}>
                   <button

@@ -102,7 +102,7 @@ def get_status():
     c_active = lc.is_ready and c_quota != "quota_exceeded"
 
     if not lc.is_ready:
-        c_detail = "API anahtarı eksik — GEMINI_API_KEY veya ANTHROPIC_API_KEY gerekli"
+        c_detail = "API anahtarı eksik — GEMINI_API_KEY veya GROQ_API_KEY gerekli"
     elif c_quota == "quota_exceeded":
         c_detail = f"Kota dolmuş — {lc.provider}/{lc.model} (farklı hesap veya gece yarısı sıfırlanır)"
     else:
@@ -149,8 +149,8 @@ async def set_api_key(req: ApiKeyRequest):
     """
     if not req.api_key or len(req.api_key) < 10:
         raise HTTPException(status_code=400, detail="Geçersiz API anahtarı.")
-    if req.provider not in ("gemini", "claude"):
-        raise HTTPException(status_code=400, detail="Geçersiz sağlayıcı. 'gemini' veya 'claude' olmalı.")
+    if req.provider not in ("gemini", "groq"):
+        raise HTTPException(status_code=400, detail="Geçersiz sağlayıcı. 'gemini' veya 'groq' olmalı.")
 
     # Önce test et — geçersiz key'i kaydetme
     test_lc = __import__("app.services.layer_c", fromlist=["LayerC"]).LayerC(

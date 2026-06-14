@@ -14,6 +14,6 @@ pdfplumber>=0.11.0     # PDF metin çıkarma
 # langchain-community==0.2.0
 # Ortam değişkenleri
 python-dotenv>=1.0.0
-# Katman C — Semantik Analiz (birini veya her ikisini yükleyin)
-google-genai>=1.0.0
-anthropic>=0.40.0
+# Katman C — Semantik Analiz
+google-genai>=1.0.0   # Birincil: Gemini 2.5 Flash
+groq>=0.11.0          # Yedek: Llama 3.3 70B via Groq (ucretsiz tier)

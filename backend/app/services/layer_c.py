@@ -1,12 +1,12 @@
 """
 Katman C — LLM Destekli Semantik Analiz
 Mantıksal tutarlılık, anlatım bozukluğu ve ek-metin uyumunu analiz eder.
-Anthropic Claude (varsayılan) veya Google Gemini API kullanır.
+Google Gemini (birincil) veya Groq/Llama (yedek) API kullanır.
 
 Ortam değişkenleri:
-  LAYER_C_PROVIDER   = "gemini" | "claude"  (varsayılan: "gemini")
+  LAYER_C_PROVIDER   = "gemini" | "groq"  (varsayılan: "gemini")
   GEMINI_API_KEY     — Gemini için (birincil)
-  ANTHROPIC_API_KEY  — Claude için (karşılaştırma)
+  GROQ_API_KEY       — Groq için (yedek, ücretsiz tier mevcuttur)
   LAYER_C_MODEL      — model ID override
 """
 from __future__ import annotations
@@ -65,14 +65,14 @@ class LayerC:
         _default_model = (
             "gemini-2.5-flash"
             if self.provider == "gemini"
-            else "claude-haiku-4-5-20251001"
+            else "llama-3.3-70b-versatile"
         )
         self.model = model or os.getenv("LAYER_C_MODEL", _default_model)
 
         _default_key = (
             os.getenv("GEMINI_API_KEY")
             if self.provider == "gemini"
-            else os.getenv("ANTHROPIC_API_KEY")
+            else os.getenv("GROQ_API_KEY")
         )
         self.api_key = api_key or _default_key
 
@@ -389,27 +389,28 @@ SADECE aşağıdaki JSON dizisini döndür, başka metin ekleme:
     def _call_llm(self, prompt: str) -> str:
         if self.provider == "gemini":
             return self._call_gemini(prompt)
-        if self.provider == "claude":
-            return self._call_claude(prompt)
-        raise ValueError(f"Bilinmeyen LLM sağlayıcı: '{self.provider}'. 'gemini' veya 'claude' kullanın.")
+        if self.provider == "groq":
+            return self._call_groq(prompt)
+        raise ValueError(f"Bilinmeyen LLM sağlayıcı: '{self.provider}'. 'gemini' veya 'groq' kullanın.")
 
-    def _call_claude(self, prompt: str) -> str:
+    def _call_groq(self, prompt: str) -> str:
         try:
-            from anthropic import Anthropic
+            from groq import Groq
         except ImportError as exc:
             raise RuntimeError(
-                "anthropic paketi kurulu değil. Yüklemek için: pip install anthropic"
+                "groq paketi kurulu değil. Yüklemek için: pip install groq"
             ) from exc
 
         if self._client is None:
-            self._client = Anthropic(api_key=self.api_key)
+            self._client = Groq(api_key=self.api_key)
 
-        message = self._client.messages.create(
+        completion = self._client.chat.completions.create(
             model=self.model,
-            max_tokens=1024,
             messages=[{"role": "user", "content": prompt}],
+            max_tokens=1024,
+            temperature=0.3,
         )
-        return message.content[0].text
+        return completion.choices[0].message.content
 
     def _call_gemini(self, prompt: str) -> str:
         try:
