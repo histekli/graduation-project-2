@@ -541,6 +541,19 @@ function ErrorBanner({ message, onDismiss }) {
   );
 }
 
+// ── Pipeline step definitions ─────────────────────────────────────────────────
+
+const PIPELINE_STEPS = [
+  { n: 1, label: "Belge ayrıştırılıyor",       desc: ".docx okuma · bölüm ve alan tespiti" },
+  { n: 2, label: "Kural motoru çalışıyor",      desc: "Biçim · zorunlu alanlar · tutarlılık" },
+  { n: 3, label: "Kılavuz veritabanı taranıyor", desc: "TDK vektör araması · RAG eşleştirme" },
+  { n: 4, label: "Yapay zeka değerlendiriyor",  desc: "Semantik analiz · LLM bulgular · öneriler" },
+  { n: 5, label: "Rapor hazırlanıyor",           desc: "Tüm bulgular derlendi" },
+];
+
+// Step timing (ms): how long to stay on each step before advancing
+const STEP_DELAYS = [1400, 2200, 3500];   // step 1→2, 2→3, 3→4
+
 // ── Main App ──────────────────────────────────────────────────────────────────
 
 export default function App() {
@@ -552,8 +565,10 @@ export default function App() {
   const [error, setError]             = useState(null);
   const [mode, setMode]               = useState("full");
   const [priority, setPriority]       = useState("all");
-  const inputRef  = useRef(null);
-  const abortRef  = useRef(null);
+  const [currentStep, setCurrentStep] = useState(0);  // 0=idle, 1-4=active, 5=done
+  const inputRef    = useRef(null);
+  const abortRef    = useRef(null);
+  const stepTimers  = useRef([]);
 
   const handleFile = useCallback((f) => {
     if (!f) return;
@@ -564,17 +579,36 @@ export default function App() {
 
   const handleDrop = useCallback((e) => { e.preventDefault(); setDragOver(false); handleFile(e.dataTransfer.files[0]); }, [handleFile]);
 
+  const clearStepTimers = useCallback(() => {
+    stepTimers.current.forEach(t => clearTimeout(t));
+    stepTimers.current = [];
+  }, []);
+
   const startAnalysis = useCallback(async () => {
     if (!file || analyzing) return;
     setAnalyzing(true); setError(null); setResults(null);
+
+    // Kick off step animation
+    setCurrentStep(1);
+    clearStepTimers();
+    let acc = 0;
+    stepTimers.current = STEP_DELAYS.map((delay, i) => {
+      acc += delay;
+      return setTimeout(() => setCurrentStep(i + 2), acc);
+    });
+
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
     const tid = setTimeout(() => controller.abort("timeout"), REQUEST_TIMEOUT_MS);
     try {
       const data = await analyzeDocument(file, mode, controller.signal);
+      clearStepTimers();
+      setCurrentStep(5);
       setResults(data);
     } catch (err) {
+      clearStepTimers();
+      setCurrentStep(0);
       if (err.name === "AbortError" || err.message === "timeout") {
         setError(`İstek zaman aşımına uğradı (${REQUEST_TIMEOUT_MS / 1000}s). Backend çalışıyor mu?`);
       } else if (err.message?.includes("Failed to fetch") || err.message?.includes("NetworkError")) {
@@ -583,9 +617,15 @@ export default function App() {
         setError(err.message || "Bilinmeyen bir hata oluştu.");
       }
     } finally { clearTimeout(tid); setAnalyzing(false); }
-  }, [file, mode, analyzing]);
+  }, [file, mode, analyzing, clearStepTimers]);
 
-  const cancelAnalysis = useCallback(() => { abortRef.current?.abort(); setAnalyzing(false); setError(null); }, []);
+  const cancelAnalysis = useCallback(() => {
+    clearStepTimers();
+    setCurrentStep(0);
+    abortRef.current?.abort();
+    setAnalyzing(false);
+    setError(null);
+  }, [clearStepTimers]);
 
   const downloadFixed = useCallback(async () => {
     if (!file || !results || downloading) return;
@@ -612,16 +652,16 @@ export default function App() {
 
   const filteredFindings = (results?.findings ?? []).filter(f => priority === "all" || f.severity === priority);
 
-  const pipelineSteps = [
-    { n: 1, label: "Ön işleme: .docx çıkarımı, bölüm tespiti" },
-    { n: 2, label: "Kural motoru: zorunlu alanlar, biçim, tutarlılık" },
-    { n: 3, label: "Kılavuz RAG: etiketli parçalar + hibrit arama" },
-    { n: 4, label: "LLM değerlendirmesi: bulgular, öneriler" },
-    { n: 5, label: "Çıktı: rapor + düzeltilmiş .docx" },
-  ].map((s, i) => ({
-    ...s,
-    status: results ? (i < 4 ? "done" : "pending") : analyzing ? (i < 2 ? "active" : "pending") : "pending",
-  }));
+  const pipelineSteps = PIPELINE_STEPS.map((s, i) => {
+    let status = "pending";
+    if (results) {
+      status = "done";
+    } else if (analyzing) {
+      if (i + 1 < currentStep) status = "done";
+      else if (i + 1 === currentStep) status = "active";
+    }
+    return { ...s, status };
+  });
 
   return (
     <div style={{ minHeight: "100vh", background: "#0a0e17", color: "#e2e8f0", fontFamily: "'DM Sans', -apple-system, sans-serif" }}>
@@ -749,19 +789,67 @@ export default function App() {
           {/* Pipeline */}
           <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12, padding: 20 }}>
             <div style={{ fontSize: 13, fontWeight: 700, color: "#94a3b8", marginBottom: 14, letterSpacing: "0.03em" }}>İşlem Hattı</div>
+
+            {/* Active step banner */}
+            {analyzing && currentStep >= 1 && currentStep <= 4 && (() => {
+              const step = PIPELINE_STEPS[currentStep - 1];
+              const isLlm = currentStep === 4;
+              return (
+                <div style={{
+                  marginBottom: 14, padding: "10px 14px", borderRadius: 8,
+                  background: isLlm ? "rgba(251,146,60,0.07)" : "rgba(6,182,212,0.06)",
+                  border: `1px solid ${isLlm ? "rgba(251,146,60,0.25)" : "rgba(6,182,212,0.2)"}`,
+                  display: "flex", alignItems: "center", gap: 10,
+                }}>
+                  <span style={{
+                    width: 14, height: 14, flexShrink: 0,
+                    border: `2px solid ${isLlm ? "rgba(251,146,60,0.3)" : "rgba(6,182,212,0.3)"}`,
+                    borderTopColor: isLlm ? "#fb923c" : "#22d3ee",
+                    borderRadius: "50%", display: "inline-block",
+                    animation: "spin 0.9s linear infinite",
+                  }} />
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: isLlm ? "#fb923c" : "#22d3ee" }}>
+                      {step.label}…
+                    </div>
+                    <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>
+                      {isLlm ? "Bu adım 20–40 saniye sürebilir" : step.desc}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
             {pipelineSteps.map((step, i) => (
-              <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", opacity: step.status === "pending" ? 0.4 : 1 }}>
+              <div key={i} style={{
+                display: "flex", alignItems: "flex-start", gap: 10,
+                padding: "7px 0",
+                opacity: step.status === "pending" ? 0.35 : 1,
+                transition: "opacity 0.3s ease",
+              }}>
                 <div style={{
                   width: 22, height: 22, borderRadius: 6, fontSize: 11, fontWeight: 700,
+                  flexShrink: 0, marginTop: 1,
                   display: "flex", alignItems: "center", justifyContent: "center",
-                  background: step.status === "done" ? "rgba(34,197,94,0.15)" : step.status === "active" ? "rgba(6,182,212,0.15)" : "rgba(255,255,255,0.05)",
-                  color: step.status === "done" ? "#4ade80" : step.status === "active" ? "#22d3ee" : "#475569",
-                  border: `1px solid ${step.status === "done" ? "rgba(34,197,94,0.3)" : step.status === "active" ? "rgba(6,182,212,0.3)" : "rgba(255,255,255,0.08)"}`,
+                  background: step.status === "done"   ? "rgba(34,197,94,0.15)"
+                             : step.status === "active" ? "rgba(6,182,212,0.15)"
+                             : "rgba(255,255,255,0.05)",
+                  color:      step.status === "done"   ? "#4ade80"
+                             : step.status === "active" ? "#22d3ee"
+                             : "#475569",
+                  border: `1px solid ${step.status === "done"   ? "rgba(34,197,94,0.3)"
+                                      : step.status === "active" ? "rgba(6,182,212,0.3)"
+                                      : "rgba(255,255,255,0.08)"}`,
                   ...(step.status === "active" ? { animation: "pulse 1.5s ease infinite" } : {}),
                 }}>
                   {step.status === "done" ? "✓" : step.n}
                 </div>
-                <span style={{ fontSize: 12, color: step.status === "done" ? "#94a3b8" : "#64748b" }}>{step.label}</span>
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: step.status === "done" ? "#94a3b8" : step.status === "active" ? "#e2e8f0" : "#64748b" }}>
+                    {step.label}
+                  </div>
+                  <div style={{ fontSize: 11, color: "#475569", marginTop: 1 }}>{step.desc}</div>
+                </div>
               </div>
             ))}
           </div>

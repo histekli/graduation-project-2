@@ -17,6 +17,8 @@ from starlette.background import BackgroundTask
 
 from pydantic import BaseModel
 
+import os
+
 from app.models.finding import AnalysisResult
 from app.services.pipeline import Pipeline
 from app.services.fixer import fix_document
@@ -28,11 +30,16 @@ app = FastAPI(
     version="0.6.0",
 )
 
-_ALLOWED_ORIGINS = [
+_DEFAULT_ORIGINS = [
     "http://localhost:3000",
     "http://localhost:3001",
     "http://127.0.0.1:3000",
 ]
+
+# CORS_ORIGINS ortam değişkeni ile production origin'leri virgülle eklenebilir
+# Örn: CORS_ORIGINS=http://192.168.1.100:3000,https://mydomain.com
+_extra = [o.strip() for o in os.getenv("CORS_ORIGINS", "").split(",") if o.strip()]
+_ALLOWED_ORIGINS = list(dict.fromkeys(_DEFAULT_ORIGINS + _extra))
 
 app.add_middleware(
     CORSMiddleware,
