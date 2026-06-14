@@ -262,6 +262,87 @@ def make_rektor_a(path: Path) -> None:
     doc.save(str(path))
 
 
+# ── Kapsamlı hata belgesi (tüm katman A+B+C kuralları) ───────────────────────
+
+def make_all_errors(path: Path) -> None:
+    """
+    Mümkün olduğunca çok kural ihlali içeren kapsamlı test belgesi.
+    Tetiklenen kurallar: FMT-001, FMT-002, FLD-005,
+    LNG-001..007, HIR-001, SEM-001, SEM-002, SEM-006 (+ Layer C semantik)
+    """
+    doc = Document()
+    _margins(doc, 2.54)   # FMT-002: yanlış marj (1.5 cm olmalı)
+
+    # Başlık bloku — geçerli yapı (ayrıştırıcının doğru çalışması için)
+    _center(doc, "T.C.", bold=True)
+    _center(doc, "GEBZE TEKNİK ÜNİVERSİTESİ REKTÖRLÜĞÜ", bold=True)
+    _center(doc, "Mühendislik Fakültesi", bold=True)
+
+    # FLD-005: yanlış tarih formatı (nokta değil eğik çizgi)
+    _sayi_tarih_row(doc, sayi_no="F.01.2-2025/099", tarih="26/05/2025")
+
+    # SEM-001: muğlak konu → konu ile metin arasında uyumsuzluk
+    _para(doc, "Konu: Bilgi")
+    _para(doc, "")
+    _para(doc, "Rektörlük Makamına,")
+    _para(doc, "")
+
+    # FMT-001: Calibri 11pt (TNR 12pt olmalı)
+    # LNG-001: paragraf küçük harfle başlıyor
+    _para(
+        doc,
+        "bu fakültemizde yürütülen çalışmalara ilişkin bilgiler aşağıda sunulmaktadır.",
+        font="Calibri", pt=11.0, align=WD_ALIGN_PARAGRAPH.JUSTIFY,
+    )
+
+    # LNG-001: cümle ortasında küçük harfle başlayan yeni cümle
+    _body(doc, "Raporlar tamamlanmıştır. söz konusu raporlar değerlendirilecektir.")
+
+    # LNG-002: virgülden önce boşluk
+    _body(doc, "Çalışma grubu ,tarafından hazırlanan belgeler teslim edilmiştir.")
+
+    # LNG-003: noktadan sonra boşluk yok
+    _body(doc, "Değerlendirme tamamlanmıştır.Sonuçlar raporlanacaktır.")
+
+    # LNG-004: art arda boşluk
+    _body(doc, "Yürütülen  çalışmalar  kapsamında  toplam  45  uzman  görev  almıştır.")
+
+    # LNG-005: virgülden sonra boşluk yok
+    _body(doc, "Birinci aşama tamamlanmış,ikinci aşama başlatılmıştır.")
+
+    # LNG-006: iki nokta öncesi gereksiz boşluk
+    _body(doc, "Konuya ilişkin açıklamalar şöyle : teslim tarihi 15 Haziran 2025'tir.")
+
+    # LNG-007: parantez içi gereksiz boşluk
+    _body(doc, "Ek belgeler ( aslı gibi onaylıdır ) formatında teslim edilecektir.")
+
+    # SEM-002: metinde EK-3 atıfı var ama ek listesinde yok
+    # SEM-006: tekrar eden cümle
+    _body(doc, (
+        "Ekte sunulan EK-1, EK-2 ve EK-3 belgelerinin incelenerek "
+        "gereğinin yapılmasını arz ederiz."
+    ))
+    _body(doc, (
+        "Ekte sunulan EK-1, EK-2 ve EK-3 belgelerinin incelenmesi "
+        "ve değerlendirilmesi önerilmektedir."
+    ))
+
+    # HIR-001: üst makama (Rektörlük) yazıda "Rica ederim" kullanıldı
+    _para(doc, "")
+    _para(doc, "Rica ederim.")
+    _para(doc, "")
+    _para(doc, "Prof. Dr. Ahmet Yılmaz")
+    _para(doc, "Dekan")
+
+    # EK listesi (EK-3 eksik → SEM-002)
+    _para(doc, "")
+    _para(doc, "EK:")
+    _para(doc, "EK-1: Faaliyet Raporu (3 sayfa)")
+    _para(doc, "EK-2: Personel Listesi (1 sayfa)")
+
+    doc.save(str(path))
+
+
 # ── Ana akış ─────────────────────────────────────────────────────────────────
 
 def create_all(output_dir: Path | None = None) -> Path:
@@ -276,6 +357,7 @@ def create_all(output_dir: Path | None = None) -> Path:
         ("test_semantic_issues.docx",   make_semantic_issues),
         ("test_language_errors.docx",   make_language_errors),
         ("test_rektor_a.docx",          make_rektor_a),
+        ("test_all_errors.docx",        make_all_errors),
     ]
 
     for fname, fn in specs:

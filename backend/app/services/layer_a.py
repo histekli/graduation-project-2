@@ -595,4 +595,67 @@ class LayerA:
                     suggestion="Fazla boşlukları temizleyin.",
                 ))
 
+            # ── İki nokta / noktalı virgül öncesi boşluk ──
+            # TDK: iki nokta üstten kesme bitiştirilerek yazılır
+            if re.search(r"[A-ZÇĞİÖŞÜa-zçğıöşü]\s+[:]", text):
+                findings.append(Finding(
+                    id=self._next_id(),
+                    layer=Layer.A,
+                    severity=Severity.INFO,
+                    rule_code="LNG-006",
+                    title="İki nokta öncesi gereksiz boşluk",
+                    description="İki nokta (':') işaretinden önce boşluk bırakılmış.",
+                    location=FindingLocation(
+                        paragraph=pp.index,
+                        text_snippet=text[:80],
+                    ),
+                    reference="TDK Yazım Kılavuzu - Noktalama İşaretleri",
+                    suggestion="İki nokta işaretinden önceki boşluğu kaldırın.",
+                ))
+
+            # ── Parantez içi gereksiz boşluk ──
+            if re.search(r"\(\s|\s\)", text):
+                findings.append(Finding(
+                    id=self._next_id(),
+                    layer=Layer.A,
+                    severity=Severity.INFO,
+                    rule_code="LNG-007",
+                    title="Parantez içi gereksiz boşluk",
+                    description="Parantez açılış veya kapanışının yanında gereksiz boşluk var.",
+                    location=FindingLocation(
+                        paragraph=pp.index,
+                        text_snippet=text[:80],
+                    ),
+                    reference="TDK Yazım Kılavuzu - Noktalama İşaretleri",
+                    suggestion="Parantez ile içerik arasındaki boşlukları kaldırın.",
+                ))
+
+            # ── Çok uzun cümle ──
+            # Resmi yazışmada 35 kelimeyi aşan cümleler okunabilirliği düşürür
+            long_sentences = [
+                s for s in re.split(r"(?<=[.!?])\s+", text)
+                if len(s.split()) > 35
+            ]
+            if long_sentences:
+                worst = max(long_sentences, key=lambda s: len(s.split()))
+                wc = len(worst.split())
+                findings.append(Finding(
+                    id=self._next_id(),
+                    layer=Layer.A,
+                    severity=Severity.INFO,
+                    rule_code="LNG-008",
+                    title="Çok uzun cümle",
+                    description=(
+                        f"Paragrafta {wc} kelimelik bir cümle var. "
+                        "Resmi yazışmada 35 kelimeyi aşan cümleler okunabilirliği azaltır."
+                    ),
+                    found=worst[:80] + ("…" if len(worst) > 80 else ""),
+                    location=FindingLocation(
+                        paragraph=pp.index,
+                        text_snippet=text[:80],
+                    ),
+                    reference="Resmi yazışma ilkeleri — özlük ve sadelik",
+                    suggestion="Cümleyi daha kısa ve net alt cümlelere bölün.",
+                ))
+
         return findings

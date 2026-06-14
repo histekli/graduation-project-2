@@ -121,12 +121,16 @@ class Pipeline:
         warnings = sum(1 for f in all_findings if f.severity == Severity.WARNING)
         infos = sum(1 for f in all_findings if f.severity == Severity.INFO)
 
+        # Uyum skoru: 100 - HATA×10 - UYARI×5 - BİLGİ×2, min 0
+        compliance_score = max(0, 100 - errors * 10 - warnings * 5 - infos * 2)
+
         return AnalysisResult(
             filename=parsed.filename,
             total_findings=len(all_findings),
             errors=errors,
             warnings=warnings,
             infos=infos,
+            compliance_score=compliance_score,
             findings=all_findings,
             parsed_document=parsed,
         )

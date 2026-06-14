@@ -34,6 +34,14 @@ _RULE_CODE_MAP: dict[str, str] = {
     "belge_yeterlilik": "SEM-005",
 }
 
+_CATEGORY_REFERENCES: dict[str, str] = {
+    "konu_metin":       "YÖ-0030 R5 Madde 6 — Konu Satırı",
+    "ek_metin":         "YÖ-0030 R5 — Ekler Bölümü",
+    "mantiksal":        "Resmi Yazışma İlkeleri — Mantıksal Tutarlılık",
+    "anlatim":          "TDK Yazım Kılavuzu; Resmi Yazışma Dili",
+    "belge_yeterlilik": "YÖ-0030 R5 — Belge Yeterliliği",
+}
+
 _SEVERITY_MAP: dict[str, Severity] = {
     "error":   Severity.ERROR,
     "warning": Severity.WARNING,
@@ -321,7 +329,7 @@ class LayerC:
                     + "\n"
                 )
 
-        return f"""Sen Türk resmi yazışma standartları (YÖ-0030, Cumhurbaşkanlığı Yazışma Kılavuzu 2025) konusunda uzman bir denetçisin.{rag_block}
+        return f"""Sen Türk resmi yazışma standartları (YÖ-0030 R5, Cumhurbaşkanlığı Yazışma Kılavuzu 2025) konusunda uzman bir denetçisin.{rag_block}
 
 Aşağıdaki resmi yazıyı analiz et:
 
@@ -336,40 +344,44 @@ EK LİSTESİ: {ek_str}
 
 Şu 4 kategoride analiz yap:
 
-1. **KONU-METİN UYUMU (category: "konu_metin", rule_code: "SEM-001")**
-   - Konu satırı metnin içeriğini doğru özetliyor mu?
-   - Konu çok muğlak mı, yanıltıcı mı veya fazla genel mi?
+1. **KONU-METİN UYUMU** (category: "konu_metin")
+   - Konu satırı metnin içeriğini doğru ve yeterince özetliyor mu?
+   - Konu çok muğlak, yanıltıcı ya da fazla genel mi?
+   - Konu ≤3 kelime ise ya da metnin amacını yansıtmıyorsa sorun bildir.
 
-2. **MANTIKSAL TUTARLILIK (category: "mantiksal", rule_code: "SEM-003")**
+2. **MANTIKSAL TUTARLILIK** (category: "mantiksal")
    - Metinde iç çelişki, belirsiz gönderme ya da eksik bağlam var mı?
-   - Muhatap ile yazı içeriği uyuşuyor mu?
-   - Talep veya bildirim açık ve net mi?
+   - Muhatap ile yazının tonu ve içeriği uyuşuyor mu?
+   - Talep veya bildirim açık, eylemlenebilir ve net mi?
 
-3. **ANLATIM BOZUKLUKLARI (category: "anlatim", rule_code: "SEM-004")**
-   - Özne-yüklem uyumsuzluğu, sarkık cümle, belirsiz zamir kullanımı var mı?
-   - Gereksiz edilgen yapı veya anlam belirsizliği var mı?
-   - Türkçe resmi yazışma diline uymayan ifadeler var mı?
+3. **ANLATIM BOZUKLUKLARI** (category: "anlatim")
+   - Özne-yüklem uyumsuzluğu, sarkık cümle, belirsiz zamir var mı?
+   - Gereksiz edilgen yapı ya da anlam belirsizliği var mı?
+   - Türkçe resmi yazışma diline uymayan ifade, anglisizm veya jargon var mı?
 
-4. **BELGE YETERLİLİĞİ (category: "belge_yeterlilik", rule_code: "SEM-005")**
+4. **BELGE YETERLİLİĞİ** (category: "belge_yeterlilik")
    - Konuda belirtilen amaç metinde yeterince açıklanmış mı?
-   - Gerekli bilgiler (tarih, süre, adet, gerekçe vb.) tam mı?
-   - Okuyucu bilgiden ne yapacağını anlayabiliyor mu?
+   - Gerekli bilgiler (tarih, süre, adet, gerekçe vb.) eksiksiz mi?
+   - Okuyucu bu yazıdan sonra ne yapacağını anlayabiliyor mu?
 
 KURALLAR:
-- SADECE gerçek ve somut sorunları raporla.
+- YALNIZCA gerçek ve belgeye özgü somut sorunları raporla. Genel gözlem yapma.
+- Her bulguda sorunlu metni doğrudan alıntıla ("found_text" alanına koy).
+- "anlatim" ve "konu_metin" kategorilerinde mümkünse yeniden yazılmış öneri sun ("suggested_text").
 - Sorun yoksa boş JSON dizisi `[]` döndür.
-- Noktalama, büyük/küçük harf, font gibi biçimsel sorunları RAPORLAMA (bunları başka katmanlar zaten kontrol ediyor).
-- Her bulgu için confidence: 0.5–1.0 arası gerçekçi bir değer ver.
-- confidence < 0.55 olan bulguları listeye EKLEME.
+- Noktalama, büyük/küçük harf, font gibi biçimsel sorunları RAPORLAMA.
+- confidence: 0.55–1.0 arası gerçekçi değer; 0.55 altını EKLEME.
 
-Yanıtı SADECE aşağıdaki JSON formatında döndür, başka hiçbir metin ekleme:
+SADECE aşağıdaki JSON dizisini döndür, başka metin ekleme:
 [
   {{
     "category": "konu_metin" | "mantiksal" | "anlatim" | "belge_yeterlilik",
     "severity": "error" | "warning" | "info",
-    "title": "Kısa başlık (en fazla 70 karakter)",
-    "description": "Sorunun açık ve somut açıklaması",
-    "suggestion": "Nasıl düzeltilmeli (somut öneri)",
+    "title": "Kısa başlık (≤70 karakter)",
+    "description": "Sorunun somut açıklaması — hangi metin, neden sorunlu",
+    "found_text": "Sorunlu metnin alıntısı (varsa, ≤120 karakter)",
+    "suggestion": "Nasıl düzeltilmeli — genel tavsiye",
+    "suggested_text": "Yeniden yazılmış metin önerisi (yalnızca anlatim/konu_metin; yoksa null)",
     "confidence": 0.75
   }}
 ]"""
@@ -445,6 +457,17 @@ Yanıtı SADECE aşağıdaki JSON formatında döndür, başka hiçbir metin ekl
             rule_code = _RULE_CODE_MAP.get(category, "SEM-003")
             severity  = _SEVERITY_MAP.get(item.get("severity", "warning"), Severity.WARNING)
 
+            # found_text → found alanına; suggested_text → ayrı alan
+            found_text = item.get("found_text") or None
+            suggested  = item.get("suggested_text") or None
+            # null/boş string'leri temizle
+            if suggested and len(suggested.strip()) < 5:
+                suggested = None
+
+            reference = _CATEGORY_REFERENCES.get(
+                category,
+                "YÖ-0030 R5; Cumhurbaşkanlığı Yazışma Kılavuzu 2025",
+            )
             findings.append(Finding(
                 id=self._next_id(),
                 layer=Layer.C,
@@ -452,8 +475,10 @@ Yanıtı SADECE aşağıdaki JSON formatında döndür, başka hiçbir metin ekl
                 rule_code=rule_code,
                 title=str(item.get("title", "Semantik sorun"))[:120],
                 description=str(item.get("description", "")),
+                found=found_text,
                 suggestion=item.get("suggestion"),
-                reference="YÖ-0030 R5; Cumhurbaşkanlığı Yazışma Kılavuzu 2025",
+                suggested_text=suggested,
+                reference=reference,
                 confidence=confidence,
             ))
 

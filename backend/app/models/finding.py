@@ -37,6 +37,8 @@ class Finding(BaseModel):
     location: Optional[FindingLocation] = None
     reference: Optional[str] = Field(None, description="İlgili yönerge/yönetmelik maddesi")
     suggestion: Optional[str] = None
+    # LLM'in önerdiği yeniden yazılmış metin (semantik bulgular için)
+    suggested_text: Optional[str] = None
     confidence: float = Field(1.0, ge=0.0, le=1.0)
 
 
@@ -105,5 +107,7 @@ class AnalysisResult(BaseModel):
     errors: int
     warnings: int
     infos: int
+    # Ağırlıklı uyum skoru (0-100). HATA:-10 UYARI:-5 BİLGİ:-2
+    compliance_score: int = Field(100, ge=0, le=100)
     findings: list[Finding]
     parsed_document: Optional[ParsedDocument] = None

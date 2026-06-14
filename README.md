@@ -35,7 +35,7 @@ Bu uygulama, yüklenen bir `.docx` dosyasını şu konularda otomatik olarak den
 - **Hiyerarşik uyum** (gönderici-alıcı statü ilişkisi, kapanış ifadesi)
 - **Semantik uyum** (konu-metin tutarlılığı, anlatım bozuklukları)
 
-Tespit edilen hatalara göre düzeltilmiş bir `.docx` üretir ve belge sonuna denetim raporu ekler.
+Tespit edilen hatalara göre düzeltilmiş bir `.docx` üretir, belge sonuna denetim raporu ekler ve 0–100 arası **uyum skoru** hesaplar.
 
 ---
 
@@ -58,14 +58,14 @@ Kullanıcı .docx yükler
 │  KATMAN A — Deterministik Kural Motoru (layer_a.py)         │
 │  · python-docx + regex                                       │
 │  · Sıfır hallüsinasyon, yüksek kesinlik                     │
-│  · 16 kural: FMT, FLD, CLS, LNG, SEM-002 (deterministik)   │
+│  · 20 kural: FMT, FLD, CLS, LNG-001..008                   │
 │  · Her analiz ~0.1 ms                                        │
 └───────────────────────┬─────────────────────────────────────┘
                         │
                         ▼
 ┌─────────────────────────────────────────────────────────────┐
 │  KATMAN B — RAG Destekli Kuralsal Kontrol (layer_b.py)      │
-│  · ChromaDB (240 chunk, 6 kaynak)                            │
+│  · ChromaDB (569 chunk, 6 kaynak)                            │
 │  · SimpleHashEmbedding (384 boyut, offline)                  │
 │  · HIR-001..005: Hiyerarşi, ilgi, dağıtım kuralları        │
 │  · Her bulgu için yönerge maddesi referansı                  │
@@ -77,13 +77,16 @@ Kullanıcı .docx yükler
 │  KATMAN C — Semantik/Mantıksal Analiz (layer_c.py)          │
 │  · Google Gemini 2.5 Flash (birincil)                        │
 │  · Anthropic Claude (opsiyonel)                              │
-│  · SEM-001..004: Konu uyumu, mantıksal tutarlılık, anlatım  │
+│  · SEM-001..006: Konu uyumu, mantıksal tutarlılık, anlatım  │
 │  · JSON structured output, confidence scoring (≥ 0.50)      │
+│  · found_text (kanıt alıntısı) + suggested_text (yeniden    │
+│    yazım önerisi) alanları                                   │
 │  · API anahtarı yoksa sessizce atlanır                       │
 └───────────────────────┬─────────────────────────────────────┘
                         │
                         ▼
               AnalysisResult (JSON)
+           compliance_score: 0–100
            + Düzeltilmiş .docx (opsiyonel)
 ```
 
@@ -96,6 +99,7 @@ Kullanıcı .docx yükler
 3. `LayerB.run()` → RAG bulgular (ChromaDB hazırsa)
 4. `LayerC.run()` → LLM bulgular (API anahtarı varsa)
 5. Tüm bulgular birleştirilerek `AnalysisResult` oluşturulur
+6. **Uyum skoru** hesaplanır: `max(0, 100 − HATA×10 − UYARI×5 − BİLGİ×2)`
 
 `mode` parametresi: `"full"` (3 katman) · `"format_only"` (sadece A) · `"content_only"` (B + C)
 
@@ -103,7 +107,7 @@ Kullanıcı .docx yükler
 
 ## Kural Kodları
 
-### Katman A — Deterministik Kurallar
+### Katman A — Deterministik Kurallar (20 kural)
 
 | Kod | Kural | Kaynak |
 |-----|-------|--------|
@@ -119,11 +123,14 @@ Kullanıcı .docx yükler
 | **CLS-001** | Kapanış ifadesi varlığı ("Arz ederim.", "Rica ederim." vb.) | YÖ-0030 R5 Md. 5-e |
 | **CLS-002** | Yasaklı kapanış ifadeleri ("Saygılarımla", "Hürmetlerimle" vb.) | YÖ-0030 R5 Md. 5-e |
 | **CLS-003** | Onay yazılarında "OLUR" dışında kapanış kullanımı | YÖ-0030 R5 Md. 5-e |
-| **LNG-001** | Cümle başında küçük harf | TDK Yazım Kılavuzu |
+| **LNG-001** | Cümle başında küçük harf (paragraf başı dahil) | TDK Yazım Kılavuzu |
 | **LNG-002** | Virgül öncesi boşluk (hata: " ,") | TDK |
 | **LNG-003** | Nokta/soru işareti sonrası boşluk eksik | TDK |
 | **LNG-004** | Art arda fazla boşluk | TDK |
-| **SEM-002** | Ek sayısı tutarsızlığı (metinde "3 adet" ama ekte 2 var) | YÖ-0030 R5 |
+| **LNG-005** | Virgül/noktalı virgül sonrası boşluk eksik (hata: ",kelime") | TDK |
+| **LNG-006** | İki nokta öncesi gereksiz boşluk (hata: "konu :") | TDK |
+| **LNG-007** | Parantez içi gereksiz boşluk (hata: "( metin )") | TDK |
+| **LNG-008** | Çok uzun cümle (>35 kelime) | Resmi yazışma okunabilirlik ilkeleri |
 
 ### Katman B — RAG Destekli Kontrol
 
@@ -143,8 +150,28 @@ Kullanıcı .docx yükler
 | **SEM-002** | Ek-Metin Çapraz Kontrolü | Metinde ek atıfı var ama EK bölümü boş, ya da tersi |
 | **SEM-003** | Mantıksal Tutarsızlık | İç çelişki, belirsiz atıf, muhatap-içerik uyumsuzluğu |
 | **SEM-004** | Anlatım Bozuklukları | Özne-yüklem, sarkık cümle, aşırı edilgen yapı |
+| **SEM-005** | Belge Yeterliliği | Amaç yeterince açıklanmış mı? Gerekli bilgiler tam mı? |
+| **SEM-006** | Tekrar Eden İfade | Metinde ≥%85 sözcük örtüşmeli cümle çiftleri (deterministik) |
 
-> **Not:** SEM-002 deterministik alt-kontrolü Katman A'da, LLM kontrolü Katman C'de çalışır.
+> **Not:** SEM-002 ve SEM-006 deterministik olarak Katman C içinde çalışır (LLM maliyeti olmadan).
+
+### Otomatik Düzeltme (fixer.py)
+
+| Kural | Düzeltme |
+|-------|----------|
+| `FMT-001` | Font → Times New Roman 12pt (metin paragrafları) |
+| `FMT-002` | Marj → 1.5 cm (tüm bölümler) |
+| `LNG-001` | Cümle başı büyük harf (paragraf başı + nokta/!? sonrası) |
+| `LNG-002` | Virgül öncesi boşluk kaldırılır |
+| `LNG-003` | Nokta sonrası boşluk eklenir |
+| `LNG-004` | Art arda boşluklar tek boşluğa indirilir |
+| `LNG-005` | Virgül/noktalı virgül sonrası boşluk eklenir |
+| `LNG-006` | İki nokta öncesi boşluk kaldırılır |
+| `LNG-007` | Parantez içi boşluklar kaldırılır |
+| `CLS-002` | Yasaklı kapanış → "Arz ederim." veya "Rica ederim." |
+| `CLS-003` | Yanlış onay ifadesi → "OLUR" |
+
+Düzeltilemeyen bulgular belgede sonuna **UYUM DENETİM RAPORU** tablosu olarak eklenir.
 
 ### Kapanış Hiyerarşisi (HIR-001)
 
@@ -172,7 +199,7 @@ Katman B, yönerge maddelerine dayalı bulgu üretmek için ChromaDB vektör ver
 | 5 | Dilekçe Hakkının Kullanılmasına Dair Kanun No. 3071 | PDF | `dilekce_kanunu` | 13 |
 | 6 | GTU Organizasyon Hiyerarşisi | Kodlanmış | (hierarchy.py) | — |
 
-**Toplam ChromaDB chunk: 240**
+**Toplam ChromaDB chunk: 569**
 
 ### Otomatik Yükleme (Auto-Ingest)
 
@@ -282,16 +309,27 @@ METİN: {metin[:2500]}
 KAPANIŞ: {kapanis_ifadesi}
 EK LİSTESİ: {ekler}
 
+İLGİLİ YÖNERGİ MADDELERİ (RAG bağlamı):
+[Katman B'den çekilen 3 ilgili ChromaDB chunk]
+
 Yanıtı SADECE JSON dizisi olarak döndür:
-[{"category": "konu_metin", "severity": "error", "title": "...",
-  "description": "...", "suggestion": "...", "confidence": 0.85}]
+[{
+  "category": "konu_metin",
+  "severity": "error",
+  "title": "...",
+  "description": "...",
+  "found_text": "Sorunlu metnin doğrudan alıntısı",
+  "suggestion": "...",
+  "suggested_text": "Yeniden yazılmış öneri (anlatim/konu_metin için)",
+  "confidence": 0.85
+}]
 ```
 
 ### Confidence Scoring
 
 - LLM her bulgu için `0.0–1.0` arası güven skoru verir
 - `confidence < 0.50` olan bulgular otomatik filtrelenir
-- UI'da düşük güvenilirlikli bulgular sarı gösterilir
+- UI'da her Katman C bulgusunda kanıt alıntısı (`found_text`) ve yeniden yazım önerisi (`suggested_text`) gösterilir
 
 ### Hata Yönetimi
 
@@ -354,8 +392,8 @@ Anahtar `data/api_config.json` dosyasına yazılır (`.gitignore`'da, git'e gitm
 
 ```bash
 # 1. Repo'yu klonla
-git clone https://github.com/hasancanistekli/dean-office-helper
-cd dean-office-helper
+git clone https://github.com/histekli/graduation-project-2.git
+cd graduation-project-2
 
 # 2. Ortam değişkenlerini ayarla
 cp .env.example .env
@@ -429,8 +467,8 @@ pytest tests/ -v
 pytest tests/test_comprehensive.py::TestLayerAFont -v
 
 # Test belgelerini yeniden oluştur
-python -m tests.create_comprehensive_docs   # 53 belge
-python -m tests.create_test_docs            # 7 temel senaryo
+python -m tests.create_comprehensive_docs   # 60 senaryo belgesi
+python -m tests.create_test_docs            # 8 temel senaryo (test_all_errors.docx dahil)
 
 # ChromaDB'yi yeniden ingest et
 python -m app.rag.ingest
@@ -449,7 +487,7 @@ Tüm katmanların anlık durumunu döndürür. Gereksiz LLM çağrısı yapmadan
   "backend": "ok",
   "version": "0.6.0",
   "layers": {
-    "A": {"active": true, "label": "Deterministik Kural Motoru", "detail": "16 kural"},
+    "A": {"active": true, "label": "Deterministik Kural Motoru", "detail": "20 kural — her zaman aktif"},
     "B": {"active": true, "label": "RAG Kontrol", "detail": "ChromaDB hazır"},
     "C": {
       "active": true,
@@ -522,6 +560,7 @@ curl -X POST http://localhost:8000/analyze \
   "errors": 2,
   "warnings": 2,
   "infos": 1,
+  "compliance_score": 72,
   "findings": [
     {
       "id": "A001",
@@ -533,14 +572,28 @@ curl -X POST http://localhost:8000/analyze \
       "suggestion": "Belgenin en üst satırına ortalanmış 'T.C.' ekleyin.",
       "reference": "YÖ-0030 R5, Dördüncü Bölüm Madde 4",
       "confidence": 1.0
+    },
+    {
+      "id": "C001",
+      "layer": "C",
+      "severity": "warning",
+      "rule_code": "SEM-004",
+      "title": "Anlatım bozukluğu",
+      "description": "Özne-yüklem uyumsuzluğu tespit edildi.",
+      "found": "...ilgili birimler tarafından yapılmaktadır...",
+      "suggested_text": "...ilgili birimler bu işlemleri yürütmektedir...",
+      "reference": "TDK Yazım Kılavuzu; Resmi Yazışma Dili",
+      "confidence": 0.82
     }
   ]
 }
 ```
 
+**Uyum Skoru Formülü:** `compliance_score = max(0, 100 − HATA×10 − UYARI×5 − BİLGİ×2)`
+
 ### `POST /analyze-and-fix`
 
-Analiz eder, otomatik düzeltilebilen hataları uygular ve düzeltilmiş `.docx` döner.
+Analiz eder, otomatik düzeltilebilen hataları uygular ve düzeltilmiş `.docx` döner. Belge sonuna UYUM DENETİM RAPORU tablosu eklenir.
 
 ```bash
 curl -X POST http://localhost:8000/analyze-and-fix \
@@ -548,18 +601,6 @@ curl -X POST http://localhost:8000/analyze-and-fix \
   -F "mode=full" \
   -o belge_duzeltilmis.docx
 ```
-
-Otomatik düzeltilen kurallar:
-
-| Kural | Düzeltme |
-|-------|----------|
-| `FMT-001` | Font → Times New Roman 12pt (metin paragrafları) |
-| `FMT-002` | Marj → 1.5 cm (tüm bölümler) |
-| `LNG-002` | Virgül öncesi boşluk kaldırılır |
-| `LNG-004` | Art arda boşluklar tek boşluğa indirilir |
-| `CLS-002` | Yasaklı kapanış → "Arz ederim." veya "Rica ederim." |
-
-Dönen belgede sonuna **UYUM DENETİM RAPORU** tablosu eklenir (otomatik düzeltmeler + manuel düzeltme gerektiren bulgular).
 
 ### `GET /health`
 
@@ -571,9 +612,9 @@ Dönen belgede sonuna **UYUM DENETİM RAPORU** tablosu eklenir (otomatik düzelt
 
 ## Test Altyapısı
 
-### Test Belgeleri (53 Senaryo)
+### Test Belgeleri (60 Senaryo)
 
-`backend/tests/fixtures/` altında 53 programatik test belgesi:
+`backend/tests/fixtures/` altında 60 programatik test belgesi:
 
 | Grup | Adet | Kapsam |
 |------|------|--------|
@@ -582,18 +623,16 @@ Dönen belgede sonuna **UYUM DENETİM RAPORU** tablosu eklenir (otomatik düzelt
 | `c_*` | 8 | Katman C: SEM-001..004 + doğru örnek |
 | `mix_*` | 7 | Çok katmanlı senaryolar |
 | `ok_*` | 3 | Referans belgeler (false-positive kontrolü) |
+| `test_*` | 8 | Temel senaryo belgeleri (test_all_errors dahil) |
 
 ```bash
 # Test belgelerini oluştur
 cd backend
 python -m tests.create_comprehensive_docs
+python -m tests.create_test_docs
 ```
 
-### Belge Tasarım Özellikleri
-
-- **Tarih hizalaması:** Sayı satırında "Sayı:" sol kenara, "Tarih:" sağ kenara hizalanır (right-tab stop @ 18 cm)
-- **Marjlar:** A4 (21 cm) - 1.5 cm × 2 = 18 cm metin alanı
-- **Birim çeşitliliği:** Bölüm, Fakülte, Enstitü, Rektörlük, Daire Başkanlığı senaryoları
+`test_all_errors.docx`: LNG-001..007, FMT-001/002, HIR-001 ve Layer C bulgularını aynı anda tetikleyen kapsamlı test belgesi (23 bulgu).
 
 ### Test Sınıfları (test_comprehensive.py)
 
@@ -602,7 +641,7 @@ TestLayerAFont          → FMT-001 (4 test)
 TestLayerAMargin        → FMT-002 (2 test)
 TestLayerAMandatoryFields → FLD-001..007 (8 test)
 TestLayerAClosing       → CLS-001..003 (4 test)
-TestLayerALanguage      → LNG-001..004 (5 test)
+TestLayerALanguage      → LNG-001..008 (5 test)
 TestLayerAEkCount       → SEM-002 deterministik (3 test)
 TestLayerBHIR001        → Hiyerarşi kapanış (4 test)
 TestLayerBHIR002        → Rektör a. tespiti (2 test)
@@ -634,12 +673,13 @@ dean-office-helper/
 │   │   │                            # Severity · Layer · DocumentSection
 │   │   ├── services/
 │   │   │   ├── parser.py            # .docx ayrıştırıcı (12 bölüm tespiti)
-│   │   │   ├── layer_a.py           # Deterministik kural motoru (16+ kural)
+│   │   │   ├── layer_a.py           # Deterministik kural motoru (20 kural)
 │   │   │   ├── layer_b.py           # RAG destekli kontrol (HIR-001..005)
 │   │   │   ├── layer_c.py           # Semantik analiz (Gemini/Claude)
 │   │   │   │                        # _from_config() · save_config() · hot-reload
-│   │   │   ├── fixer.py             # Belge düzeltici + rapor tablosu
-│   │   │   └── pipeline.py          # Orkestratör · ChromaDB auto-ingest
+│   │   │   │                        # found_text + suggested_text çıktısı
+│   │   │   ├── fixer.py             # Belge düzeltici (11 otomatik kural) + rapor tablosu
+│   │   │   └── pipeline.py          # Orkestratör · ChromaDB auto-ingest · uyum skoru
 │   │   ├── rules/
 │   │   │   └── hierarchy.py         # GTU org. hiyerarşisi + kapanış kuralları tablosu
 │   │   └── rag/
@@ -654,12 +694,12 @@ dean-office-helper/
 │   │   │   ├── tdk_tum_kurallar.json # TDK web scraping sonucu
 │   │   │   ├── yonetmelik_tam_metin.txt
 │   │   │   └── yonetmelik_ek_ornekler.txt
-│   │   ├── chromadb/               # ChromaDB vektör veritabanı (240 chunk, gitignore)
+│   │   ├── chromadb/               # ChromaDB vektör veritabanı (569 chunk, gitignore)
 │   │   └── api_config.json         # UI'dan kaydedilen API anahtarı (gitignore)
 │   ├── tests/
-│   │   ├── fixtures/               # 53 test belgesi (programatik)
-│   │   ├── create_comprehensive_docs.py  # 53 senaryo oluşturucu
-│   │   ├── create_test_docs.py     # 7 temel senaryo oluşturucu
+│   │   ├── fixtures/               # 60 test belgesi (programatik)
+│   │   ├── create_comprehensive_docs.py  # 52 senaryo oluşturucu
+│   │   ├── create_test_docs.py     # 8 temel senaryo oluşturucu
 │   │   ├── test_comprehensive.py   # 95 test (sınıf tabanlı)
 │   │   ├── test_scenarios.py       # 22 senaryo testi
 │   │   └── test_pipeline.py        # Pipeline entegrasyon
@@ -673,13 +713,13 @@ dean-office-helper/
 │   ├── src/components/
 │   │   └── DeanOfficeHelper.jsx    # Ana UI bileşeni
 │   │                               # SystemStatus · StatusDot · FileUpload
-│   │                               # ResultsPanel · FindingCard
+│   │                               # ResultsPanel · FindingCard · StatCard
+│   │                               # Uyum skoru · Yapay zeka yeniden yazım önerisi paneli
 │   ├── Dockerfile                  # Multi-stage: deps → builder → runner
 │   └── package.json                # Next.js 14 + React 18
 ├── docker-compose.yml              # backend + frontend · chromadb_data volume
 ├── .env.example                    # API key şablonu
 ├── .gitignore                      # .env · chromadb/ · api_config.json
-├── PROJECT_PLAN.md                 # Sprint geçmişi ve teknik notlar
 └── README.md                       # Bu dosya
 ```
 
@@ -694,6 +734,7 @@ dean-office-helper/
 | `LAYER_C_PROVIDER` | `gemini` | `"gemini"` veya `"claude"` |
 | `LAYER_C_MODEL` | `gemini-2.5-flash` | Model ID override |
 | `NEXT_PUBLIC_API_URL` | `http://localhost:8000` | Frontend'in backend URL'i |
+| `CORS_ORIGINS` | — | Üretim ortamında ek CORS origin'leri (virgülle ayrılmış) |
 
 API anahtarı `.env` dosyasına ek olarak `data/api_config.json`'dan da okunur (UI öncelikli).
 

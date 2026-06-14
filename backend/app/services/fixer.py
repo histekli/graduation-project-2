@@ -11,7 +11,10 @@ Otomatik düzeltilebilen kurallar:
   LNG-003  Noktadan sonra boşluk ekle  (≥3 harfli kelimelerden sonra)
   LNG-004  Art arda fazla boşlukları temizle
   LNG-005  Virgül/noktalı virgülden sonra boşluk ekle
+  LNG-006  İki nokta öncesi gereksiz boşluğu kaldır
+  LNG-007  Parantez içi gereksiz boşlukları kaldır
   CLS-002  Yasaklı kapanış ifadesi → standart ifadeyle değiştir
+  CLS-003  Yanlış onay ifadesi → OLUR
 """
 from __future__ import annotations
 
@@ -32,7 +35,11 @@ from app.models.finding import DocumentSection, Finding, ParsedDocument, Severit
 
 # ── Sabitler ──────────────────────────────────────────────────────────────────
 
-_AUTO_FIXABLE = frozenset({"FMT-001", "FMT-002", "LNG-001", "LNG-002", "LNG-003", "LNG-004", "LNG-005", "CLS-002"})
+_AUTO_FIXABLE = frozenset({
+    "FMT-001", "FMT-002",
+    "LNG-001", "LNG-002", "LNG-003", "LNG-004", "LNG-005", "LNG-006", "LNG-007",
+    "CLS-002", "CLS-003",
+})
 
 # Türkçe özel büyük harf dönüşümü: Python .upper() 'i'→'I' yapar, Türkçe'de 'İ' olmalı
 _TR_UPPER = str.maketrans("iı", "İI")
@@ -118,7 +125,7 @@ def fix_document(
                      if pp.section == DocumentSection.KAPANIS}
 
     # ── Paragraf bazlı düzeltmeler ──────────────────────────────────────────
-    fmt001 = lng001 = lng002 = lng003 = lng004 = lng005 = cls002 = False
+    fmt001 = lng001 = lng002 = lng003 = lng004 = lng005 = lng006 = lng007 = cls002 = cls003 = False
 
     for para in doc.paragraphs:
         stripped = para.text.strip()
@@ -182,12 +189,43 @@ def fix_document(
                     lng005 = True
                     original = run.text
 
+            # LNG-006: İki nokta öncesi gereksiz boşluk
+            if "LNG-006" in fixable_codes:
+                run.text = re.sub(
+                    r"([A-ZÇĞİÖŞÜa-zçğıöşü])\s+:",
+                    r"\1:",
+                    run.text,
+                )
+                if run.text != original:
+                    lng006 = True
+                    original = run.text
+
+            # LNG-007: Parantez içi gereksiz boşluk
+            if "LNG-007" in fixable_codes:
+                run.text = re.sub(r"\(\s+", "(", run.text)
+                run.text = re.sub(r"\s+\)", ")", run.text)
+                if run.text != original:
+                    lng007 = True
+                    original = run.text
+
             # CLS-002: Yasaklı kapanış ifadesi
             if "CLS-002" in fixable_codes and is_kapanis:
                 new_text = _replace_forbidden_closing(run.text)
                 if new_text != run.text:
                     run.text = new_text
                     cls002 = True
+
+            # CLS-003: Yanlış onay ifadesi → OLUR
+            if "CLS-003" in fixable_codes and is_kapanis:
+                new_text = re.sub(
+                    r"\b(Onay|Uygundur|Muvafıktır)\b",
+                    "OLUR",
+                    run.text,
+                    flags=re.IGNORECASE,
+                )
+                if new_text != run.text:
+                    run.text = new_text
+                    cls003 = True
 
     if fmt001:
         auto_fixed_codes.append("FMT-001")
@@ -201,8 +239,14 @@ def fix_document(
         auto_fixed_codes.append("LNG-003")
     if lng002:
         auto_fixed_codes.append("LNG-002")
+    if lng006:
+        auto_fixed_codes.append("LNG-006")
+    if lng007:
+        auto_fixed_codes.append("LNG-007")
     if cls002:
         auto_fixed_codes.append("CLS-002")
+    if cls003:
+        auto_fixed_codes.append("CLS-003")
     elif "CLS-002" in fixable_codes:
         # Desen eşleşmedi → rapor tablosuna ekle
         report_findings.extend(f for f in findings if f.rule_code == "CLS-002")
@@ -244,6 +288,10 @@ def _fix_sentence_case_para(para) -> bool:
     fix_positions: list[int] = []
     for m in re.finditer(r'(?<=[.!?])\s+([a-zçğıöşü])', combined):
         fix_positions.append(m.start(1))
+
+    # Paragraf başı küçük harf: noktalama işareti gerektirmez
+    if combined and re.match(r'[a-zçğıöşü]', combined):
+        fix_positions = [0] + fix_positions
 
     if not fix_positions:
         return False

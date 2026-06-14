@@ -509,6 +509,16 @@ function FindingCard({ finding, index }) {
                   💡 {finding.suggestion}
                 </div>
               )}
+              {finding.suggested_text && (
+                <div style={{ marginTop: 2, padding: "12px 14px", background: "rgba(139,92,246,0.06)", border: "1px solid rgba(139,92,246,0.2)", borderRadius: 8, lineHeight: 1.6 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "#a78bfa", letterSpacing: "0.06em", marginBottom: 6 }}>
+                    ✦ YAPAY ZEKA YENİDEN YAZIM ÖNERİSİ
+                  </div>
+                  <div style={{ fontSize: 12, color: "#c4b5fd", fontStyle: "italic" }}>
+                    "{finding.suggested_text}"
+                  </div>
+                </div>
+              )}
               {finding.confidence < 1.0 && (
                 <div style={{ fontSize: 11, color: "#64748b" }}>
                   Güven skoru: {Math.round(finding.confidence * 100)}%
@@ -953,6 +963,13 @@ export default function App() {
 
             {/* Stats */}
             <div style={{ display: "flex", gap: 14, marginBottom: 24, flexWrap: "wrap" }}>
+              <StatCard
+                label="Uyum Skoru"
+                value={`${results.compliance_score}/100`}
+                color={results.compliance_score >= 80 ? "#22c55e" : results.compliance_score >= 60 ? "#f59e0b" : "#ef4444"}
+                icon="★"
+                delay={0.05}
+              />
               <StatCard label="Toplam Bulgu" value={results.total_findings} color="#e2e8f0" icon="◈" delay={0.1} />
               <StatCard label="Hata"         value={results.errors}         color="#ef4444" icon="✕" delay={0.2} />
               <StatCard label="Uyarı"        value={results.warnings}       color="#f59e0b" icon="△" delay={0.3} />
