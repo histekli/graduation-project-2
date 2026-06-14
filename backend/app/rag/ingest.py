@@ -133,9 +133,14 @@ def ingest_tdk_json(filepath: str | Path) -> list[dict]:
     with open(filepath, "r", encoding="utf-8") as f:
         data = json.load(f)
 
+    # Kural içermeyen bölümleri atla:
+    # SUNUŞ → yalnızca tarihsel giriş metni, kural yok (21 KB boş gürültü)
+    # Kısaltmalar Dizini → sembol tablosu, aranabilir kural değil
+    _SKIP_SECTIONS = {"SUNUŞ", "Kısaltmalar Dizini"}
+
     documents: list[dict] = []
     for title, content in data.items():
-        if title == "Kısaltmalar Dizini" or not content or len(str(content)) < 20:
+        if title in _SKIP_SECTIONS or not content or len(str(content)) < 20:
             continue
         content_str = str(content).strip()
         chunks = _chunk_text(content_str)
@@ -305,26 +310,34 @@ def build_collection(
     documents: list[dict],
     persist_dir: str | Path | None = None,
 ) -> chromadb.Collection:
-    """Koleksiyonu sıfırdan oluşturur ve dökümanları yükler."""
+    """
+    Koleksiyonu oluşturur veya mevcut olanı temizleyip günceller.
+
+    delete + create yerine get_or_create + clear + upsert kullanılır;
+    böylece koleksiyonun UUID'si korunur ve çalışan server süreçleri
+    yeniden başlatılmadan güncellemeyi görür.
+    """
     client = (
         chromadb.PersistentClient(path=str(persist_dir))
         if persist_dir
         else chromadb.Client()
     )
 
-    try:
-        client.delete_collection(COLLECTION_NAME)
-    except Exception:
-        pass
-
     embedding_fn = SimpleHashEmbedding(dim=384)
-    collection = client.create_collection(
+    collection = client.get_or_create_collection(
         name=COLLECTION_NAME,
         metadata={"description": "GTU resmi yazışma kılavuz ve yönergeleri"},
         embedding_function=embedding_fn,
     )
 
-    # Tekrarlanan ID'leri temizle
+    # Mevcut tüm dökümanları temizle (UUID değişmez)
+    existing_ids = collection.get(include=[])["ids"]
+    if existing_ids:
+        batch_size = 100
+        for i in range(0, len(existing_ids), batch_size):
+            collection.delete(ids=existing_ids[i:i + batch_size])
+
+    # Tekrarlanan ID'leri filtrele
     seen_ids: set[str] = set()
     unique_docs: list[dict] = []
     for d in documents:
@@ -332,6 +345,7 @@ def build_collection(
             seen_ids.add(d["id"])
             unique_docs.append(d)
 
+    # Yeni dökümanları ekle
     batch_size = 100
     for i in range(0, len(unique_docs), batch_size):
         batch = unique_docs[i:i + batch_size]
