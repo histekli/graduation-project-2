@@ -115,7 +115,7 @@ def get_status():
             "A": {
                 "active": True,
                 "label": "Deterministik Kural Motoru",
-                "detail": "16 kural — her zaman aktif",
+                "detail": "20 kural — her zaman aktif",
             },
             "B": {
                 "active": lb is not None,

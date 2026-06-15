@@ -179,7 +179,10 @@ class LayerC:
 
         ek_nums_in_list: set[str] = set()
         for ek_item in doc.ek_list:
-            ek_nums_in_list.update(re.findall(r"\d+", ek_item))
+            # Yalnızca EK etiket numarasını al (ör. "EK-1: ... (3 sayfa)" → 1, sayfa sayısı değil)
+            ek_nums_in_list.update(
+                re.findall(r"\bEK[-\s]?(\d+)", ek_item, re.IGNORECASE)
+            )
 
         # Metin içinde ek atıfı var ama EK bölümü oluşturulmamış
         if (ek_refs_in_text or has_genel_ek_ref) and not doc.ek_list:
@@ -221,6 +224,33 @@ class LayerC:
                 ),
                 confidence=0.78,
             ))
+
+        # Metinde atıf yapılan ek numarası EK listesinde yer almıyor
+        if doc.ek_list and ek_refs_in_text:
+            referenced_nums: set[str] = set()
+            for ref in ek_refs_in_text:
+                referenced_nums.update(re.findall(r"\d+", ref))
+            unlisted = referenced_nums - ek_nums_in_list
+            if unlisted:
+                missing = ", ".join(f"EK-{n}" for n in sorted(unlisted, key=int))
+                findings.append(Finding(
+                    id=self._next_id(),
+                    layer=Layer.C,
+                    severity=Severity.WARNING,
+                    rule_code="SEM-002",
+                    title="Metinde atıf yapılan ek listede yok",
+                    description=(
+                        f"Metinde {missing} ekine atıfta bulunulmuş ancak bu ek, "
+                        "belgenin EK bölümünde listelenmemiş."
+                    ),
+                    found=missing,
+                    reference="YÖ-0030 R5, Ekler bölümü",
+                    suggestion=(
+                        f"{missing} ekini EK bölümüne ekleyin ya da metindeki "
+                        "atfı düzeltin."
+                    ),
+                    confidence=0.9,
+                ))
 
         return findings
 

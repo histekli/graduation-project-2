@@ -236,7 +236,7 @@ class LayerA:
                 title="Tarih eksik",
                 description="Belgede tarih bilgisi bulunamadı.",
                 reference="Yönetmelik Madde 13",
-                suggestion="Tarih alanını GG/AA/YYYY formatında ekleyin.",
+                suggestion="Tarih alanını GG.AA.YYYY formatında ekleyin.",
             ))
         else:
             # Format kontrolü: GG.AA.YYYY veya GG/AA/YYYY
@@ -261,6 +261,24 @@ class LayerA:
                     found=clean_date,
                     reference="Yönetmelik Madde 13",
                     suggestion="Tarihi GG.AA.YYYY formatına dönüştürün.",
+                ))
+            elif "/" in date_match.group(0):
+                # Tarih geçerli fakat ayraç eğik çizgi — resmî yazışmada nokta gerekir
+                matched = date_match.group(0)
+                findings.append(Finding(
+                    id=self._next_id(),
+                    layer=Layer.A,
+                    severity=Severity.WARNING,
+                    rule_code="FLD-005",
+                    title="Tarih ayracı hatalı",
+                    description=(
+                        f"Tarih '{matched}' eğik çizgi ile yazılmış; resmî "
+                        "yazışmada ayraç olarak nokta kullanılmalıdır."
+                    ),
+                    expected="GG.AA.YYYY (ör: 15.03.2026)",
+                    found=matched,
+                    reference="Yönetmelik Madde 13",
+                    suggestion="Tarihteki eğik çizgileri nokta ile değiştirin (GG.AA.YYYY).",
                 ))
         return findings
 
