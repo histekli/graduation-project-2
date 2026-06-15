@@ -16,6 +16,7 @@ GTU Dekanlık ofisi için resmi yazışmaları (.docx) denetleyen, 3 katmanlı y
 - [LLM Entegrasyonu](#llm-entegrasyonu)
 - [Sistem Durumu ve API Anahtar Yönetimi](#sistem-durumu-ve-api-anahtar-yönetimi)
 - [Hızlı Başlangıç (Docker)](#hızlı-başlangıç-docker)
+- [Ücretsiz Demo Deploy: Render + Vercel](#ücretsiz-demo-deploy-render--vercel)
 - [Geliştirme Ortamı](#geliştirme-ortamı)
 - [API Referansı](#api-referansı)
 - [Test Altyapısı](#test-altyapısı)
@@ -421,6 +422,76 @@ docker compose down -v
 
 ---
 
+## Ücretsiz Demo Deploy: Render + Vercel
+
+1–2 haftalık bir demo yayını için backend **Render Free Web Service**, frontend **Vercel** üzerinde ücretsiz çalıştırılabilir. Domain gerekmez; her iki platformun verdiği URL'ler kullanılır.
+
+```
+Tarayıcı ──▶ Vercel (Next.js frontend)  ──fetch──▶  Render (FastAPI + ChromaDB)
+            https://<proje>.vercel.app              https://<proje>.onrender.com
+```
+
+> **Sıra önemli:** önce **backend (Render)**, sonra **frontend (Vercel)**, en son **CORS** güncellemesi.
+
+### A) Backend — Render
+
+1. [render.com](https://render.com) hesabı aç, GitHub ile bağlan.
+2. **New + → Blueprint** seç ve bu repoyu bağla. Repo kökündeki [`render.yaml`](render.yaml) otomatik algılanır (servis `doh-backend`, Docker, Free plan, health check `/health`).
+   - Blueprint istemezsen elle: **New + → Web Service** → repoyu bağla → **Root Directory: `backend`** → **Runtime: Docker** → **Health Check Path: `/health`** → **Instance Type: Free**.
+3. **Environment** değişkenlerini gir:
+
+   | Key | Değer |
+   |-----|-------|
+   | `GEMINI_API_KEY` | (Gemini anahtarın — gizli) |
+   | `LAYER_C_PROVIDER` | `gemini` |
+   | `LAYER_C_MODEL` | `gemini-2.5-flash` |
+   | `CORS_ORIGINS` | şimdilik `*` (Vercel URL belli olunca güncellenecek) |
+
+   > `PORT` **GİRME** — Render otomatik enjekte eder, `entrypoint.sh` bu değeri kullanır (`--port ${PORT:-8000}`).
+4. **Create / Apply** — Render imajı derler; ChromaDB vektör veritabanı derleme sırasında oluşturulur (offline). İlk build birkaç dakika sürer.
+5. Deploy bitince Render bir URL verir: `https://doh-backend-xxxx.onrender.com`. Bunu kopyala.
+6. Test: tarayıcıda `https://doh-backend-xxxx.onrender.com/health` aç → `{"status":"ok"}` görmelisin (Swagger için `/docs`).
+
+### B) Frontend — Vercel
+
+1. [vercel.com](https://vercel.com) hesabı aç, GitHub ile bağlan.
+2. **Add New → Project** → bu repoyu seç → **Import**.
+3. Proje ayarları:
+
+   | Ayar | Değer |
+   |------|-------|
+   | Framework Preset | Next.js (otomatik algılanır) |
+   | Root Directory | `frontend` |
+   | Build Command | `npm run build` (varsayılan) |
+   | Output Directory | (varsayılan — dokunma) |
+4. **Environment Variables** ekle:
+
+   | Key | Value |
+   |-----|-------|
+   | `NEXT_PUBLIC_API_URL` | `https://doh-backend-xxxx.onrender.com` (A.5'teki URL, sonunda `/` **olmadan**) |
+5. **Deploy** — bitince Vercel bir URL verir: `https://<proje>.vercel.app`.
+
+### C) Son CORS düzeltmesi
+
+Vercel URL'si artık belli. Backend'in yalnızca ona izin vermesi için:
+
+1. Render → servis → **Environment** → `CORS_ORIGINS` değerini Vercel URL'sine güncelle:
+   ```
+   CORS_ORIGINS=https://<proje>.vercel.app
+   ```
+2. **Save Changes** — Render otomatik yeniden dağıtır. (Demo süresince `*` de bırakılabilir, fakat URL ile sınırlamak daha güvenlidir.)
+
+Artık `https://<proje>.vercel.app` üzerinden uygulama uçtan uca çalışır.
+
+### D) Demo uyarıları (ücretsiz plan sınırları)
+
+- **Uyku:** Render Free servis ~15 dk istek almazsa uykuya geçer. Sonraki ilk istek servisi uyandırır ve **30–60 sn** sürebilir.
+- **Isındırma:** Demo öncesi `https://doh-backend-xxxx.onrender.com/health` adresini açarak backend'i önceden uyandır.
+- **ChromaDB:** Vektör veritabanı imaja gömülüdür; her cold start'ta hazırdır. Ancak çalışma anında diske yazılan veriler (ör. UI'dan kaydedilen API anahtarı) **kalıcı değildir** — yeniden dağıtımda sıfırlanır. Bu yüzden demo için anahtarı UI yerine Render `GEMINI_API_KEY` env değişkeninden vermek daha sağlamdır.
+- **Bellek:** Free plan 512 MB RAM'dir; yoğun eşzamanlı kullanım için değil, demo amaçlıdır.
+
+---
+
 ## Geliştirme Ortamı
 
 ### Backend
@@ -729,12 +800,13 @@ dean-office-helper/
 
 | Değişken | Varsayılan | Açıklama |
 |----------|------------|----------|
-| `GEMINI_API_KEY` | — | Katman C (Gemini) için. Yoksa Katman C devre dışı |
-| `ANTHROPIC_API_KEY` | — | Katman C (Claude) için. Opsiyonel |
-| `LAYER_C_PROVIDER` | `gemini` | `"gemini"` veya `"claude"` |
-| `LAYER_C_MODEL` | `gemini-2.5-flash` | Model ID override |
-| `NEXT_PUBLIC_API_URL` | `http://localhost:8000` | Frontend'in backend URL'i |
-| `CORS_ORIGINS` | — | Üretim ortamında ek CORS origin'leri (virgülle ayrılmış) |
+| `GEMINI_API_KEY` | — | Katman C (Gemini, birincil) için. Yoksa Katman C devre dışı |
+| `GROQ_API_KEY` | — | Katman C (Groq / Llama 3.3 70B, yedek) için. Opsiyonel |
+| `LAYER_C_PROVIDER` | `gemini` | `"gemini"` veya `"groq"` |
+| `LAYER_C_MODEL` | `gemini-2.5-flash` | Model ID override (groq → `llama-3.3-70b-versatile`) |
+| `CORS_ORIGINS` | — | İzinli frontend origin'leri (virgülle ayrılmış) veya `*` (demo) |
+| `PORT` | `8000` | Backend portu. Render/Cloud platformları otomatik enjekte eder |
+| `NEXT_PUBLIC_API_URL` | `http://localhost:8000` | Frontend'in backend URL'i (build-time'da inline) |
 
 API anahtarı `.env` dosyasına ek olarak `data/api_config.json`'dan da okunur (UI öncelikli).
 

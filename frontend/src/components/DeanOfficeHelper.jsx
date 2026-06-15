@@ -1,8 +1,9 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 
-const API_BASE =
+const API_BASE = (
   (typeof process !== "undefined" && process.env?.NEXT_PUBLIC_API_URL) ||
-  "http://localhost:8000";
+  "http://localhost:8000"
+).replace(/\/+$/, ""); // sondaki "/" temizlenir (Render URL'i yanlışlıkla / ile girilebilir)
 
 const REQUEST_TIMEOUT_MS = 90_000;
 

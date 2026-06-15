@@ -11,4 +11,5 @@ else
     echo "[entrypoint] ChromaDB mevcut — ingest atlanıyor."
 fi
 
-exec uvicorn app.main:app --host 0.0.0.0 --port 8000
+# Render/Cloud platformları PORT ortam değişkenini enjekte eder; yoksa yerelde 8000
+exec uvicorn app.main:app --host 0.0.0.0 --port "${PORT:-8000}"

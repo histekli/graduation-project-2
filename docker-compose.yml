@@ -9,10 +9,11 @@ services:
       - "8000:8000"
     environment:
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
       - LAYER_C_PROVIDER=${LAYER_C_PROVIDER:-gemini}
+      - LAYER_C_MODEL=${LAYER_C_MODEL:-gemini-2.5-flash}
       # Production: tarayıcının geldiği frontend origin'ini ekleyin
-      # Örn: CORS_ORIGINS=http://192.168.1.100:3000
+      # Örn: CORS_ORIGINS=https://my-app.vercel.app
       - CORS_ORIGINS=${CORS_ORIGINS:-}
     volumes:
       # ChromaDB veritabanı kalıcı — ilk başlatmada ingest.py doldurur

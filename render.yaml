@@ -1,0 +1,34 @@
+# ════════════════════════════════════════════════════════════════════════════
+#  Render Blueprint — Backend (FastAPI) ücretsiz demo dağıtımı
+#  Kullanım: Render Dashboard → New → Blueprint → bu repoyu seç → Apply
+#
+#  GEMINI_API_KEY ve CORS_ORIGINS "sync: false" olduğundan deploy sırasında
+#  Render panelinden elle girilir (gizli tutulur, repoya yazılmaz).
+# ════════════════════════════════════════════════════════════════════════════
+services:
+  - type: web
+    name: doh-backend
+    runtime: docker
+    rootDir: backend          # Dockerfile ve build context bu klasörde (backend/Dockerfile)
+    plan: free
+    region: frankfurt         # Türkiye'ye en yakın ücretsiz bölge
+    healthCheckPath: /health
+    autoDeploy: true          # main'e push edilince otomatik yeniden dağıtır
+    envVars:
+      - key: GEMINI_API_KEY   # Katman C (Gemini) — panelden gir, gizli
+        sync: false
+      - key: LAYER_C_PROVIDER
+        value: gemini
+      - key: LAYER_C_MODEL
+        value: gemini-2.5-flash
+      - key: CORS_ORIGINS     # Vercel URL'si belli olunca güncelle (ör. https://xxx.vercel.app)
+        sync: false           # Demo için geçici olarak "*" de girilebilir
+      # - key: GROQ_API_KEY   # Opsiyonel yedek sağlayıcı (Llama 3.3 70B) — gerekirse aç
+      #   sync: false
+
+    # ChromaDB vektör veritabanı imaj derlenirken oluşturulur (offline hash embedding),
+    # bu yüzden demo için kalıcı disk GEREKMEZ. Kalıcı veri istenirse (ücretli plan):
+    # disk:
+    #   name: chroma-data
+    #   mountPath: /app/data/chromadb
+    #   sizeGB: 1

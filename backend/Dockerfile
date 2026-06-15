@@ -17,6 +17,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app/ app/
 COPY data/ data/
 
+# ChromaDB vektör veritabanını imaj derlenirken önceden oluştur.
+# SimpleHashEmbedding offline çalışır (API anahtarı gerektirmez); böylece
+# Render Free runtime'da bellek yoğun ingest çalışmaz ve cold start hızlanır.
+RUN python -m app.rag.ingest
+
 # Entrypoint scripti
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh

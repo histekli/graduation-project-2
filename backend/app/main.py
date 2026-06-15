@@ -36,18 +36,30 @@ _DEFAULT_ORIGINS = [
     "http://127.0.0.1:3000",
 ]
 
-# CORS_ORIGINS ortam değişkeni ile production origin'leri virgülle eklenebilir
-# Örn: CORS_ORIGINS=http://192.168.1.100:3000,https://mydomain.com
-_extra = [o.strip() for o in os.getenv("CORS_ORIGINS", "").split(",") if o.strip()]
-_ALLOWED_ORIGINS = list(dict.fromkeys(_DEFAULT_ORIGINS + _extra))
+# CORS_ORIGINS ortam değişkeni ile production origin'leri eklenir:
+#   · Virgülle ayrılmış liste:  CORS_ORIGINS=https://app.vercel.app,https://site.com
+#   · Demo için tüm origin'ler:  CORS_ORIGINS=*   (uygulama cookie kullanmaz, güvenli)
+# Yerel geliştirmede boş bırakılırsa localhost origin'leri zaten izinlidir.
+_cors_env = os.getenv("CORS_ORIGINS", "").strip()
+
+if _cors_env == "*":
+    # "*" ile allow_credentials=True tarayıcılarca reddedilir. Uygulama cookie
+    # kullanmadığından credentials kapatılır ve temiz bir wildcard yayınlanır.
+    _cors_kwargs: dict = {"allow_origins": ["*"], "allow_credentials": False}
+else:
+    _extra = [o.strip() for o in _cors_env.split(",") if o.strip()]
+    _allowed_origins = list(dict.fromkeys(_DEFAULT_ORIGINS + _extra))
+    _cors_kwargs = {
+        "allow_origins": _allowed_origins,
+        "allow_origin_regex": r"http://localhost:\d+",
+        "allow_credentials": True,
+    }
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=_ALLOWED_ORIGINS,
-    allow_origin_regex=r"http://localhost:\d+",
-    allow_credentials=True,
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
+    **_cors_kwargs,
 )
 
 pipeline = Pipeline()
