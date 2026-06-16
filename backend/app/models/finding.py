@@ -107,7 +107,8 @@ class AnalysisResult(BaseModel):
     errors: int
     warnings: int
     infos: int
-    # Ağırlıklı uyum skoru (0-100). HATA:-10 UYARI:-5 BİLGİ:-2
+    # Kural koduna göre ağırlıklı, oransal uyum skoru (0–100).
+    # bkz. app/rules/scoring_weights.py (KRİTİK/ORTA/DÜŞÜK + gerekçe)
     compliance_score: int = Field(100, ge=0, le=100)
     findings: list[Finding]
     parsed_document: Optional[ParsedDocument] = None

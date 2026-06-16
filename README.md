@@ -11,6 +11,7 @@ GTU Dekanlık ofisi için resmi yazışmaları (.docx) denetleyen, 3 katmanlı y
 - [Proje Özeti](#proje-özeti)
 - [Mimari: 3 Katmanlı Pipeline](#mimari-3-katmanlı-pipeline)
 - [Kural Kodları](#kural-kodları)
+- [Uyum Skoru (Ağırlıklı)](#uyum-skoru-ağırlıklı)
 - [Bilgi Tabanı (RAG)](#bilgi-tabanı-rag)
 - [Türkçe Dil İşleme Zorlukları](#türkçe-dil-işleme-zorlukları)
 - [Web Scraping: TDK Verisi](#web-scraping-tdk-verisi)
@@ -104,9 +105,9 @@ Kullanıcı .docx yükler
 3. `LayerB.run()` → RAG bulgular (ChromaDB hazırsa)
 4. `LayerC.run()` → LLM bulgular (API anahtarı varsa)
 5. Tüm bulgular birleştirilerek `AnalysisResult` oluşturulur
-6. **Uyum skoru** hesaplanır: `max(0, 100 − HATA×10 − UYARI×5 − BİLGİ×2)`
+6. **Uyum skoru** kural-ağırlıklı, oransal formülle hesaplanır (bkz. [Uyum Skoru](#uyum-skoru-ağırlıklı))
 
-`mode` parametresi: `"full"` (3 katman) · `"format_only"` (sadece A) · `"content_only"` (B + C)
+`mode` parametresi: `"full"` (3 katman) · `"format_only"` (sadece A — deterministik biçim **ve** içerik kuralları) · `"content_only"` (B + C)
 
 ---
 
@@ -188,6 +189,50 @@ Düzeltilemeyen bulgular belgede sonuna **UYUM DENETİM RAPORU** tablosu olarak 
 | Üst makam → Alt makam | **Rica ederim.** |
 | Eşit birimler arası | **Arz ederim.** (öneri) |
 | Onay yazıları | **OLUR** |
+
+---
+
+## Uyum Skoru (Ağırlıklı)
+
+Eski skor `max(0, 100 − HATA×10 − UYARI×5 − BİLGİ×2)` yalnızca **önem düzeyine** (severity) bakıyordu. Bu savunulamazdı: tek bir font hatası (FMT-001, `error`) ile bir hiyerarşi hatası (HIR-001, `warning`) — biri error diğeri warning olduğu için — yanlış sıralanıyordu; üstelik ceza sınırsızdı.
+
+Yeni skor cezayı **kural koduna** göre ağırlıklandırır ve **oransal** hesaplar. Ağırlıklar tek bir merkezi dosyada toplanır: [`backend/app/rules/scoring_weights.py`](backend/app/rules/scoring_weights.py).
+
+### Formül
+
+```
+skor = 100 × max(0, 1 − Σ kural_ağırlığı / DOYGUNLUK_CEZASI)        DOYGUNLUK_CEZASI = 100
+```
+
+`DOYGUNLUK_CEZASI = 100`, belgenin tümüyle uyumsuz sayıldığı (skorun 0'a indiği) doygunluk eşiğidir — yaklaşık 5 kritik ihlale denktir. Skor her zaman **0–100** aralığında ve **monotoniktir** (daha çok / daha ağır hata → daha düşük skor).
+
+### Ağırlık tablosu (kategorik)
+
+| Kategori | Ağırlık | Kapsam | Örnek kurallar |
+|----------|---------|--------|----------------|
+| **KRİTİK** | 20 | Belgeyi hukuki/kurumsal olarak geçersiz/yanlış kılan ihlaller | FLD-001..007 (eksik zorunlu alan), HIR-001 (yanlış hiyerarşik kapanış), CLS-001/002/003 (kapanış/onay) |
+| **ORTA** | 8 | Biçimsel ve içeriksel uyumsuzluklar | FMT-001 (font), FMT-002 (marj), SEM-001/002/003/005, HIR-003 |
+| **DÜŞÜK** | 2 | Kozmetik / dilbilgisi / bilgilendirme | LNG-001..008, SEM-004 (anlatım), SEM-006 (tekrar), HIR-002/004/005 |
+
+Ağırlık **severity'den bağımsızdır**: HIR-001 önem düzeyi `warning` olsa bile KRİTİK; FMT-001 önem düzeyi `error` olsa bile ORTA. Bilinmeyen kodlar için önem düzeyine göre makul varsayılan uygulanır.
+
+### Ağırlıkların kaynağı (dürüst kalibrasyon notu)
+
+> Ağırlıklar, kuralların belgenin hukuki/kurumsal geçerliliğine etkisine göre **[yazar tarafından] kategorik olarak** atanmıştır; henüz uzman anketi veya hata-frekans analizi yapılmamıştır. İleride uzman görüşü ya da gerçek belge hata istatistikleriyle kalibre edilmesi planlanmaktadır. Uydurma bir literatür referansı verilmemiştir.
+
+### Eski ↔ yeni karşılaştırma
+
+`python -m scripts.score_compare` (Katman A + B deterministik bulguları):
+
+| Belge | E/U/B | Eski skor | Yeni skor | Not |
+|-------|-------|-----------|-----------|-----|
+| `test_perfect.docx` | 0/0/0 | 100 | 100 | Hatasız → 100 (her iki formül) |
+| `b_hir001_muhendislik_rektor.docx` | 0/1/0 | **95** | **80** | HIR-001 `warning` olduğu için eski formül neredeyse cezalandırmıyordu; yeni formül kritik sayar |
+| `a_fmt001_calibri.docx` | 2/1/0 | 75 | 76 | Font + ek tutarsızlığı (orta ağırlıklar) |
+| `mix_fmt_hir.docx` | 2/1/0 | 75 | 64 | Aynı E/U/B ama HIR-001 ağır bastığı için daha düşük |
+| `a_fld_all_missing.docx` | 7/1/0 | 25 | 0 | Tüm zorunlu alanlar eksik → tümüyle uyumsuz |
+
+Tek-bulgu etkisi: **1 × FMT-001 (ORTA) → 92**, **1 × HIR-001 (KRİTİK) → 80** — aynı belgede font ve hiyerarşi hatası farklı skor düşüşü üretir.
 
 ---
 
@@ -860,7 +905,7 @@ curl -X POST http://localhost:8000/analyze \
 }
 ```
 
-**Uyum Skoru Formülü:** `compliance_score = max(0, 100 − HATA×10 − UYARI×5 − BİLGİ×2)`
+**Uyum Skoru:** Kural-ağırlıklı, oransal formül — bkz. [Uyum Skoru (Ağırlıklı)](#uyum-skoru-ağırlıklı).
 
 ### `POST /analyze-and-fix`
 

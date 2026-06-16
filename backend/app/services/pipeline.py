@@ -17,6 +17,7 @@ from app.services.layer_a import LayerA
 from app.services.layer_b import LayerB
 from app.services.layer_c import LayerC
 from app.rag.retriever import GuidelineRetriever
+from app.rules.scoring_weights import compute_compliance_score
 
 logger = logging.getLogger(__name__)
 
@@ -140,8 +141,9 @@ class Pipeline:
         warnings = sum(1 for f in all_findings if f.severity == Severity.WARNING)
         infos = sum(1 for f in all_findings if f.severity == Severity.INFO)
 
-        # Uyum skoru: 100 - HATA×10 - UYARI×5 - BİLGİ×2, min 0
-        compliance_score = max(0, 100 - errors * 10 - warnings * 5 - infos * 2)
+        # Uyum skoru: kural koduna göre ağırlıklı, oransal (0–100).
+        # bkz. app/rules/scoring_weights.py — kategorik ağırlıklar + gerekçe.
+        compliance_score = compute_compliance_score(all_findings)
 
         return AnalysisResult(
             filename=parsed.filename,
