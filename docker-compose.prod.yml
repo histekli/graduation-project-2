@@ -1,0 +1,59 @@
+# ════════════════════════════════════════════════════════════════════════════
+#  Production / Demo — DigitalOcean Droplet (host'ta Nginx reverse proxy ile)
+#
+#  Kullanım (sunucuda, repo kökünde):
+#    docker compose -f docker-compose.prod.yml up --build -d
+#  (scripts/deploy-digitalocean.sh bunu otomatik çalıştırır)
+#
+#  Yerel geliştirme için docker-compose.yml kullanın — bu dosya onu DEĞİŞTİRMEZ.
+#
+#  Fark: Container portları yalnızca 127.0.0.1'e bağlanır; dışarıya doğrudan
+#  açılmaz. Host'taki Nginx (80/443) istekleri bu localhost portlarına yönlendirir.
+# ════════════════════════════════════════════════════════════════════════════
+version: "3.9"
+
+services:
+  backend:
+    build:
+      context: ./backend
+    container_name: doh-backend
+    ports:
+      - "127.0.0.1:8000:8000"      # yalnızca host (Nginx) erişebilir
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - LAYER_C_PROVIDER=${LAYER_C_PROVIDER:-gemini}
+      - LAYER_C_MODEL=${LAYER_C_MODEL:-gemini-2.5-flash}
+      # Tarayıcının geldiği frontend origin'i (ör. http://SERVER_IP veya https://domain.com)
+      - CORS_ORIGINS=${CORS_ORIGINS:-}
+    volumes:
+      # ChromaDB veritabanı kalıcı — ilk başlatmada ingest.py doldurur
+      - chromadb_data:/app/data/chromadb
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s   # ingest süresine tolerans
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # Tarayıcı bu URL'e istek atar. Nginx /api path proxy için: http://SERVER_IP/api
+        # Domainli kullanımda: https://api.domain.com
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+    container_name: doh-frontend
+    ports:
+      - "127.0.0.1:3000:3000"      # yalnızca host (Nginx) erişebilir
+    environment:
+      - NODE_ENV=production
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  chromadb_data:
+    driver: local

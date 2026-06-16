@@ -16,7 +16,8 @@ GTU Dekanlık ofisi için resmi yazışmaları (.docx) denetleyen, 3 katmanlı y
 - [LLM Entegrasyonu](#llm-entegrasyonu)
 - [Sistem Durumu ve API Anahtar Yönetimi](#sistem-durumu-ve-api-anahtar-yönetimi)
 - [Hızlı Başlangıç (Docker)](#hızlı-başlangıç-docker)
-- [Ücretsiz Demo Deploy: Render + Vercel](#ücretsiz-demo-deploy-render--vercel)
+- [DigitalOcean Droplet Deployment (Önerilen)](#digitalocean-droplet-deployment-önerilen)
+- [Alternatif: Ücretsiz Demo Deploy (Render + Vercel)](#alternatif-ücretsiz-demo-deploy-render--vercel)
 - [Geliştirme Ortamı](#geliştirme-ortamı)
 - [API Referansı](#api-referansı)
 - [Test Altyapısı](#test-altyapısı)
@@ -422,7 +423,124 @@ docker compose down -v
 
 ---
 
-## Ücretsiz Demo Deploy: Render + Vercel
+## DigitalOcean Droplet Deployment (Önerilen)
+
+Kalıcı bir demo/production yayını için **önerilen yöntem** budur. Uygulama, bir Ubuntu sunucu (DigitalOcean Droplet) üzerinde Docker Compose ile çalışır; host makinedeki **Nginx reverse proxy**, dış trafiği container'lara yönlendirir. Frontend (Next.js, 3000) ve backend (FastAPI, 8000) container portları yalnızca `127.0.0.1`'e bağlanır — dışarıya yalnızca Nginx (80/443) açıktır.
+
+```
+Tarayıcı ──▶ Nginx (host :80/:443) ──┬──▶ /        Next.js  (127.0.0.1:3000)
+                                     └──▶ /api/    FastAPI  (127.0.0.1:8000)
+```
+
+İlgili dosyalar: [`docker-compose.prod.yml`](docker-compose.prod.yml) · [`docs/nginx-ip.conf`](docs/nginx-ip.conf) · [`docs/nginx-domain.conf`](docs/nginx-domain.conf) · [`scripts/deploy-digitalocean.sh`](scripts/deploy-digitalocean.sh) · [`.env.digitalocean.example`](.env.digitalocean.example)
+
+### 1. Droplet oluştur
+
+- **Image:** Ubuntu 22.04 veya 24.04 LTS
+- **Boyut:** en az **2 GB RAM** (ChromaDB ingest + iki container için önerilir)
+- Docker Marketplace image'ı ya da düz Ubuntu kullanılabilir.
+
+### 2. Sunucuya bağlan
+
+```bash
+ssh root@SERVER_IP
+```
+
+### 3. Docker + Docker Compose kur
+
+Ubuntu image'ında Docker yoksa:
+
+```bash
+curl -fsSL https://get.docker.com | sh
+docker --version && docker compose version
+```
+
+### 4. Repoyu klonla
+
+```bash
+git clone https://github.com/histekli/graduation-project-2.git
+cd graduation-project-2
+```
+
+### 5. Ortam değişkenlerini ayarla
+
+```bash
+cp .env.digitalocean.example .env
+nano .env        # GEMINI_API_KEY ve SERVER_IP değerlerini doldur
+```
+
+IP ile test için: `NEXT_PUBLIC_API_URL=http://SERVER_IP/api` ve `CORS_ORIGINS=http://SERVER_IP`.
+
+### 6. Container'ları başlat
+
+```bash
+docker compose -f docker-compose.prod.yml up --build -d
+```
+
+İlk başlatmada ChromaDB vektör veritabanı otomatik oluşturulur (~30 sn). Sonraki güncellemeler için [`scripts/deploy-digitalocean.sh`](scripts/deploy-digitalocean.sh) tek komutla `git pull` + yeniden derleme yapar.
+
+### 7. Nginx kur ve IP üzerinden yayına al
+
+```bash
+sudo apt update && sudo apt install -y nginx
+sudo cp docs/nginx-ip.conf /etc/nginx/sites-available/doh
+sudo ln -s /etc/nginx/sites-available/doh /etc/nginx/sites-enabled/doh
+sudo rm -f /etc/nginx/sites-enabled/default
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+### 8. Test et
+
+```bash
+curl http://SERVER_IP/api/health        # {"status":"ok"}
+```
+
+Tarayıcıdan **http://SERVER_IP** → uygulama arayüzü.
+
+### 9. Güvenlik duvarı (UFW)
+
+```bash
+sudo ufw allow OpenSSH
+sudo ufw allow 'Nginx Full'
+sudo ufw enable
+```
+
+Container portları (3000/8000) zaten yalnızca `127.0.0.1`'e bağlıdır; UFW dış trafiği yalnızca SSH ve Nginx ile sınırlar.
+
+### 10. (Opsiyonel) Domain + HTTPS
+
+1. **DNS:** `domain.com`, `www.domain.com`, `api.domain.com` için A kaydını Droplet IP'sine yönlendirin.
+2. `.env` dosyasında domainli değerleri kullanın ve container'ları yeniden başlatın:
+   ```
+   NEXT_PUBLIC_API_URL=https://api.domain.com
+   CORS_ORIGINS=https://domain.com,https://www.domain.com
+   ```
+   ```bash
+   docker compose -f docker-compose.prod.yml up --build -d
+   ```
+3. [`docs/nginx-domain.conf`](docs/nginx-domain.conf) dosyasını kullanın (`domain.com` yerlerini değiştirin), ardından `sudo nginx -t && sudo systemctl reload nginx`.
+4. SSL sertifikası (Certbot HTTPS bloklarını ve yönlendirmeyi otomatik ekler):
+   ```bash
+   sudo apt install -y certbot python3-certbot-nginx
+   sudo certbot --nginx -d domain.com -d www.domain.com -d api.domain.com
+   ```
+
+### Dağıtım öncesi kontrol listesi
+
+- [ ] `.env` dolu (`GEMINI_API_KEY`, `NEXT_PUBLIC_API_URL`, `CORS_ORIGINS`) ve git'e **gönderilmemiş**
+- [ ] `docker compose -f docker-compose.prod.yml ps` → her iki container `Up (healthy)`
+- [ ] `curl http://SERVER_IP/api/health` → `{"status":"ok"}`
+- [ ] Tarayıcıdan belge yükleme uçtan uca çalışıyor
+- [ ] UFW etkin; yalnızca SSH + Nginx açık
+- [ ] (Domainli) SSL sertifikası geçerli, `https://` çalışıyor
+
+> **Güvenlik:** API anahtarları yalnızca sunucudaki `.env` dosyasında tutulur. `.env` ve `data/api_config.json` `.gitignore`'dadır ve **asla commit'lenmez** — anahtarları repoya yüklemeyin.
+
+---
+
+## Alternatif: Ücretsiz Demo Deploy (Render + Vercel)
+
+> Bu proje için **önerilen yöntem yukarıdaki DigitalOcean Droplet** kurulumudur. Render + Vercel ücretsizdir ancak Free plan uyku/cold-start sınırlarına sahiptir; kısa süreli, sunucu istemeyen demolar için uygundur.
 
 1–2 haftalık bir demo yayını için backend **Render Free Web Service**, frontend **Vercel** üzerinde ücretsiz çalıştırılabilir. Domain gerekmez; her iki platformun verdiği URL'ler kullanılır.
 
@@ -788,8 +906,16 @@ dean-office-helper/
 │   │                               # Uyum skoru · Yapay zeka yeniden yazım önerisi paneli
 │   ├── Dockerfile                  # Multi-stage: deps → builder → runner
 │   └── package.json                # Next.js 14 + React 18
-├── docker-compose.yml              # backend + frontend · chromadb_data volume
-├── .env.example                    # API key şablonu
+├── docs/
+│   ├── nginx-ip.conf               # Nginx — IP ile yayın (/ → frontend, /api → backend)
+│   └── nginx-domain.conf           # Nginx — domain + api.domain.com + SSL notları
+├── scripts/
+│   └── deploy-digitalocean.sh      # git pull + compose down/up --build -d
+├── docker-compose.yml              # Yerel: backend + frontend · chromadb_data volume
+├── docker-compose.prod.yml         # Production: portlar 127.0.0.1'e bağlı (Nginx önü)
+├── .env.example                    # Ortam değişkeni şablonu (yerel)
+├── .env.digitalocean.example       # Ortam değişkeni şablonu (DigitalOcean)
+├── render.yaml                     # Render Blueprint (alternatif deploy)
 ├── .gitignore                      # .env · chromadb/ · api_config.json
 └── README.md                       # Bu dosya
 ```
