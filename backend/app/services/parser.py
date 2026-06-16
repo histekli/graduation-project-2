@@ -17,6 +17,7 @@ from app.models.finding import (
     ParsedDocument, ParsedParagraph, DocumentSection
 )
 from app.rules.hierarchy import FACULTIES, INSTITUTES, DEPARTMENTS
+from app.services.turkish_text import tr_upper, is_closing_line
 
 logger = logging.getLogger(__name__)
 
@@ -34,23 +35,18 @@ _RE_ILGI_ITEM = re.compile(r"^\s*[a-zçğıöşü]\)", re.IGNORECASE)
 _RE_EK = re.compile(r"^\s*EK\s*:", re.IGNORECASE)
 _RE_EK_ITEM = re.compile(r"^\s*EK[\s-]*\d", re.IGNORECASE)
 _RE_DAGITIM = re.compile(r"^\s*DAĞITIM", re.IGNORECASE)
-_RE_KAPANIS = re.compile(
-    r"(Arz\s+ederim|Rica\s+ederim|Arz\s+ve\s+rica\s+ederim|"
-    r"Bilgilerinize\s+arz\s+ederim|Gereğini\s+arz\s+ederim|"
-    r"Gereğini\s+rica\s+ederim|Bilgilerinize\s+rica\s+ederim|"
-    r"Takdirlerinize\s+arz\s+ederim|Uygun\s+görüşle\s+arz\s+ederim|"
-    r"Rica\s+olunur|OLUR|Uygundur|Muvafıktır)",
-    re.IGNORECASE,
-)
+# Kapanış ifadesi tespiti app.services.turkish_text.is_closing_line() ile yapılır
+# (çekim-toleranslı: "arz ederim", "arz edilmektedir", "arz olunur" vb.).
 _RE_REKTOR_A = re.compile(r"Rektör\s+a\.", re.IGNORECASE)
-_RE_ONAY_WORDS = re.compile(r"\b(Onay|Uygundur|Muvafıktır)\b", re.IGNORECASE)
 
 _KNOWN_UNITS = [*FACULTIES, *INSTITUTES, *DEPARTMENTS]
-_KNOWN_UNITS_UPPER = [name.upper() for name in _KNOWN_UNITS]
+# Türkçe-duyarlı büyük harf: "Bilgi İşlem".upper() yerine tr_upper kullanılır
+# (i→İ, ı→I) ki karşılaştırma her iki tarafta da tutarlı olsun.
+_KNOWN_UNITS_UPPER = [tr_upper(name) for name in _KNOWN_UNITS]
 
 
 def _matches_known_unit(text: str) -> bool:
-    upper_text = text.upper()
+    upper_text = tr_upper(text)
     return any(unit in upper_text for unit in _KNOWN_UNITS_UPPER)
 
 
@@ -331,8 +327,11 @@ def parse_docx(file_path: str | Path, original_filename: str | None = None) -> P
             ilgi_active = False
         
         # Kapanış ifadesi — kısa paragraflar kapanış olarak kabul edilir (< 70 karakter)
-        # Uzun paragrafların sonu "arz ederim" ile bitebilir ama bunlar metin gövdesidir
-        if _RE_KAPANIS.search(text) and not kapanis_done and len(text) < 70:
+        # Uzun paragrafların sonu "arz ederim" ile bitebilir ama bunlar metin gövdesidir.
+        # is_closing_line() çekim-toleranslıdır ("arz ederim" / "arz edilmektedir" /
+        # "arz olunur" ...) ve eşleşmenin paragraf sonunda olmasını arar; böylece
+        # "arz edilen konular" gibi gövde içi çekimler kapanış sayılmaz.
+        if is_closing_line(text) and not kapanis_done and len(text) < 70:
             pp.section = DocumentSection.KAPANIS
             parsed.kapanis_phrase = text
             kapanis_done = True

@@ -12,6 +12,7 @@ GTU Dekanlık ofisi için resmi yazışmaları (.docx) denetleyen, 3 katmanlı y
 - [Mimari: 3 Katmanlı Pipeline](#mimari-3-katmanlı-pipeline)
 - [Kural Kodları](#kural-kodları)
 - [Bilgi Tabanı (RAG)](#bilgi-tabanı-rag)
+- [Türkçe Dil İşleme Zorlukları](#türkçe-dil-işleme-zorlukları)
 - [Web Scraping: TDK Verisi](#web-scraping-tdk-verisi)
 - [LLM Entegrasyonu](#llm-entegrasyonu)
 - [Sistem Durumu ve API Anahtar Yönetimi](#sistem-durumu-ve-api-anahtar-yönetimi)
@@ -281,6 +282,60 @@ Anlamsal modelin daha yüksek olduğu sorgu sayısı: 5/5
 ```
 
 İlk iki sonuç, HIR-001'in dayandığı **kapanış-hiyerarşi tablosu** maddesidir.
+
+---
+
+## Türkçe Dil İşleme Zorlukları
+
+Türkçe, İngilizce gibi dillere göre metin işlemeyi zorlaştıran iki temel özelliğe sahiptir. Sistem her ikisini de [`backend/app/services/turkish_text.py`](backend/app/services/turkish_text.py) altında ele alır.
+
+### 1. Sondan eklemeli (agglutinative) yapı
+
+Türkçe'de bir kök çok sayıda ek alarak farklı çekimlere girer. Resmi yazışmadaki kapanış ifadesi tek bir kalıp değildir:
+
+```
+arz ederim · arz ederiz · arz edilmektedir · arz ediyorum · arz olunur
+rica ederim · rica ederiz · rica olunur · rica edilmektedir
+```
+
+Sabit string eşleşmesi (`"Arz ederim" in text`) bu varyasyonların çoğunu **kaçırır** ve kapanış var olduğu hâlde CLS-001 ("kapanış eksik") yanlış tetiklenir. Çözüm, **kök + onaylı fiil gövdesi** yaklaşımıdır:
+
+```python
+# turkish_text.py — "arz"/"rica" kökü + "ed-"/"olun-" gövdesi + serbest ek
+_ARZ_RE  = re.compile(r"\barz(?:\s+ve\s+rica)?\s+(?:ed|olun)[a-zçğıöşü]*", re.IGNORECASE)
+_RICA_RE = re.compile(r"\brica\s+(?:ed|olun)[a-zçğıöşü]*", re.IGNORECASE)
+```
+
+`is_closing_line()` ayrıca eşleşmenin paragraf **sonunda** olmasını arar; böylece gövde içindeki "arz edilen konular" gibi çekimler kapanış sayılmaz. CLS-001 ve HIR-001 bu çekim-toleranslı tespitten faydalanır: "arz edilmektedir" geçerli kapanış sayılır, ancak üst makama "rica ederiz" (çekimli) yazıldığında HIR-001 hâlâ doğru tetiklenir.
+
+### 2. "İ / I" büyük-küçük harf problemi
+
+Latin alfabesinde `'I'`'nın küçüğü `'i'` kabul edilir; Türkçe'de ise `I↔ı` (noktasız) ve `İ↔i` (noktalı) ayrıdır. Python'un yerleşik metotları bunu yanlış yapar:
+
+```python
+"İLGİ".lower()   # → "i̇lgi"  (i + birleşik nokta — bozuk karşılaştırma)
+"Bilgi".upper()  # → "BILGI"  ("BİLGİ" olmalıydı)
+```
+
+`tr_lower()` / `tr_upper()` Türkçe locale kurallarını uygular (`İ→i`, `I→ı`, `i→İ`, `ı→I`). Parser'ın birim tespiti, Katman B'nin muhatap/dağıtım (`GEREĞİ`/`BİLGİ`) karşılaştırmaları ve kapanış analizleri artık bu yardımcıları kullanır:
+
+```python
+tr_lower("İLGİ")   # → "ilgi"
+tr_upper("ığdır")  # → "IĞDIR"
+tr_upper("bilgi")  # → "BİLGİ"
+```
+
+### 3. Neden Türkçe için anlamsal embedding şart? (Eksik 1 ile bağ)
+
+Eski hash embedding ([SimpleHashEmbedding](#embedding-anlamsal-model-multilingual-e5)) metni karakter trigram'larına bölüp hashler. Türkçe'nin çekim ekleri tam da bu trigram dağılımını kaydırır: "ilgi", "ilgili", "ilgisine", "ilgilendirir" karakter düzeyinde benzer görünse de "öğrenci muafiyeti" ↔ "öğrencinin muaf tutulması" gibi **eş anlamlı ama farklı kelimelerle** yazılmış ifadeler trigram uzayında uzak düşer — anlamsal yakınlık kaybolur. Hash ile yapılan ölçümde alan-içi ilgili çiftlerin ortalama benzerliği yalnızca **0.27**'dir ve kimi durumda alan dışı bir cümle (ör. "patates haşlama süresi") ilgili maddeden daha yüksek skor alır.
+
+Çok-dilli `sentence-transformers` modeli (`multilingual-e5-small`) ise kelimeleri değil **anlamı** öğrenilmiş bir temsile gömer; aynı çiftlerde benzerlik **0.84**'e çıkar (×3.1) ve çekim/eş anlam farkları korunur. Sayısal kanıt: `python -m scripts.embedding_compare`.
+
+### Bilinen sınırlamalar
+
+- **Argo / kurum-içi kısaltmalar:** Standart dışı kısaltmalar (ör. "Müh. Fak.") ve argo, model eğitim dağılımında seyrek olabilir.
+- **OCR'lı belgeler:** Taranıp OCR'dan geçmiş `.docx`'lerde karakter hataları hem parser'ı hem embedding'i yanıltabilir.
+- **Bağlamsal kısaltmalar:** "Hk." (hakkında), "a." (adına) gibi noktalı kısaltmalar cümle sonu noktalamasıyla karışabilir; bu yüzden kısaltmalar LNG-003'te ayrıca elenir.
 
 ---
 

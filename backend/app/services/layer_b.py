@@ -9,6 +9,9 @@ from app.models.finding import (
 )
 from app.rag.retriever import GuidelineRetriever
 from app.rules.hierarchy import CLOSING_RULES, HIERARCHY
+from app.services.turkish_text import (
+    tr_upper, tr_lower, closing_uses_arz, closing_uses_rica
+)
 import re
 
 
@@ -46,9 +49,9 @@ class LayerB:
         if not doc.kapanis_phrase or not doc.muhatap:
             return findings
 
-        phrase = doc.kapanis_phrase.strip().lower()
-        muhatap_upper = doc.muhatap.upper()
-        unit_upper = (doc.unit_name or "").upper()
+        phrase = doc.kapanis_phrase.strip()
+        muhatap_upper = tr_upper(doc.muhatap)
+        unit_upper = tr_upper(doc.unit_name or "")
 
         sender_is_lower = False
         if any(k in muhatap_upper for k in ["REKTÖRLÜK", "REKTÖR"]):
@@ -58,8 +61,9 @@ class LayerB:
                 sender_is_lower = True
 
         if sender_is_lower:
-            is_arz = any(k in phrase for k in ["arz ederim", "arz ve rica"])
-            if not is_arz and "rica ederim" in phrase:
+            # Çekim-toleranslı: "arz ederim/ederiz/edilmektedir/olunur" hepsi 'arz' sayılır.
+            is_arz = closing_uses_arz(phrase)
+            if not is_arz and closing_uses_rica(phrase):
                 rag_results = self.retriever.search_by_rule(
                     "kapanış ifadesi arz ederim üst makam hiyerarşi"
                 )
@@ -133,7 +137,9 @@ class LayerB:
         if len(doc.dagitim_list) < 2:
             return findings
 
-        dagitim_text = " ".join(doc.dagitim_list).upper()
+        # tr_upper: "Gereği" → "GEREĞİ", "Bilgi" → "BİLGİ" (str.upper bunları
+        # "GEREĞI"/"BILGI" yapardı). Yine de eski biçimleri de güvenle kontrol et.
+        dagitim_text = tr_upper(" ".join(doc.dagitim_list))
         has_geregi = "GEREĞİ" in dagitim_text or "GEREĞI" in dagitim_text
         has_bilgi = "BİLGİ" in dagitim_text or "BILGI" in dagitim_text
 
@@ -168,17 +174,17 @@ class LayerB:
         if not doc.muhatap:
             return findings
 
-        muhatap_upper = doc.muhatap.upper()
+        muhatap_upper = tr_upper(doc.muhatap)
 
         # unit_name bilinen birimler listesinden geliyor; standart dışı birimler için
         # HEADER paragraflarını da tara (ör. "Bilgisayar Mühendisliği Bölümü")
         if doc.unit_name:
-            unit_upper = doc.unit_name.upper()
+            unit_upper = tr_upper(doc.unit_name)
         else:
-            unit_upper = " ".join(
+            unit_upper = tr_upper(" ".join(
                 pp.text for pp in doc.paragraphs
                 if pp.section.value == "header"
-            ).upper()
+            ))
 
         # Fakülte/Enstitü → Rektörlük (üst makam, normal)
         # Rektörlük → Fakülte/Enstitü (alt makam, normal)
@@ -262,12 +268,12 @@ class LayerB:
         if not doc.kapanis_phrase:
             return findings
 
-        phrase = doc.kapanis_phrase.strip().lower()
+        phrase = tr_lower(doc.kapanis_phrase.strip())
 
         # Yasaklı ifade kontrolü (Katman A da yapıyor ama burada referans ekliyoruz)
         forbidden_matches = []
         for forbidden in CLOSING_RULES["forbidden"]:
-            if forbidden.lower() in phrase:
+            if tr_lower(forbidden) in phrase:
                 forbidden_matches.append(forbidden)
 
         if forbidden_matches:

@@ -924,6 +924,54 @@ def make_mix_ilgili_ekli_complete(path: Path) -> None:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# TÜRKÇE ÇEKİM VARYASYONLARI — Kapanış ifadesi morfolojik testleri (EKSIK 5)
+# ═══════════════════════════════════════════════════════════════════════════════
+# Türkçe sondan eklemeli olduğundan kapanış ifadeleri tek kalıp değildir.
+# Parser'ın "arz ederim" dışındaki çekimleri de kapanış sayması beklenir
+# (aksi halde CLS-001 yanlış tetiklenir).
+
+def make_infl_arz_edilmektedir(path: Path) -> None:
+    """Çekim: 'Bilgilerinize arz edilmektedir.' — geçerli kapanış (CLS-001 yok)."""
+    doc = Document()
+    _margins(doc)
+    _std_header(doc, birim="Mühendislik Fakültesi", muhatap="Rektörlük Makamına,")
+    _body(doc, "Fakültemiz 2025 yılı faaliyet raporu hazırlanmış olup ekte sunulmaktadır.")
+    _std_closing(doc, phrase="Bilgilerinize arz edilmektedir.")
+    _save(doc, path.name)
+
+
+def make_infl_arz_olunur(path: Path) -> None:
+    """Çekim: 'Arz olunur.' — geçerli kapanış (CLS-001 yok)."""
+    doc = Document()
+    _margins(doc)
+    _std_header(doc, birim="Mühendislik Fakültesi", muhatap="Rektörlük Makamına,")
+    _body(doc, "Söz konusu talebe ilişkin değerlendirme tamamlanmıştır.")
+    _std_closing(doc, phrase="Arz olunur.")
+    _save(doc, path.name)
+
+
+def make_infl_arz_ederiz(path: Path) -> None:
+    """Çekim: 'Gereğini arz ederiz.' (çoğul) — geçerli kapanış (CLS-001 yok)."""
+    doc = Document()
+    _margins(doc)
+    _std_header(doc, birim="Mühendislik Fakültesi", muhatap="Rektörlük Makamına,")
+    _body(doc, "Bölümümüzün ek ödenek talebine ilişkin gerekçeler aşağıda sunulmuştur.")
+    _std_closing(doc, phrase="Gereğini arz ederiz.")
+    _save(doc, path.name)
+
+
+def make_infl_rica_ederiz_wrong_hier(path: Path) -> None:
+    """Çekim: 'Rica ederiz.' üst makama — geçerli kapanış (CLS-001 yok) ama HIR-001 tetiklenir."""
+    doc = Document()
+    _margins(doc)
+    _std_header(doc, birim="Mühendislik Fakültesi", muhatap="Rektörlük Makamına,")
+    _body(doc, "2025 güz dönemi sınav takvimi düzenlemelerine ilişkin talep iletilmektedir.")
+    _std_closing(doc, phrase="Gereğini rica ederiz.",
+                 name="Prof. Dr. Ahmet Yılmaz", title="Dekan")
+    _save(doc, path.name)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # REFERANS BELGELER — Doğru format, false-positive kontrolü
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -1041,6 +1089,11 @@ COMPREHENSIVE_SPECS: list[tuple[str, str, callable]] = [
     ("mix_bolum_dekan_correct.docx",    "Mix doğru: Bölüm→Dekanlık doğru yazı",          make_mix_bolum_dekan_correct),
     ("mix_rektorluk_daire_correct.docx","Mix doğru: Rektörlük→Daire alt makam",          make_mix_rektorluk_daireye_correct),
     ("mix_ilgili_ekli_complete.docx",   "Mix doğru: İlgi+Ek+Dağıtım tam belge",          make_mix_ilgili_ekli_complete),
+    # ── Türkçe çekim varyasyonları (EKSIK 5) ──────────────────────────────
+    ("infl_arz_edilmektedir.docx",      "Çekim: 'arz edilmektedir' geçerli kapanış",     make_infl_arz_edilmektedir),
+    ("infl_arz_olunur.docx",            "Çekim: 'arz olunur' geçerli kapanış",           make_infl_arz_olunur),
+    ("infl_arz_ederiz.docx",            "Çekim: 'arz ederiz' geçerli kapanış",           make_infl_arz_ederiz),
+    ("infl_rica_ederiz_wrong.docx",     "Çekim: 'rica ederiz' üst makama → HIR-001",     make_infl_rica_ederiz_wrong_hier),
     # ── Referans belgeler ────────────────────────────────────────────────
     ("ok_arial_font.docx",              "OK: Arial 11pt doğru kullanım",                 make_ok_arial_font),
     ("ok_enstitü_yazisi.docx",          "OK: Enstitü tam ve doğru yazı",                 make_ok_enstitü_yazisi),

@@ -9,6 +9,7 @@ from app.models.finding import (
     Finding, FindingLocation, Severity, Layer, ParsedDocument, DocumentSection
 )
 from app.rules.hierarchy import CLOSING_RULES
+from app.services.turkish_text import tr_lower
 
 
 class LayerA:
@@ -430,7 +431,7 @@ class LayerA:
             return []
 
         raw = m.group(1)
-        ek_count_in_text = int(raw) if raw.isdigit() else number_map.get(raw.lower())
+        ek_count_in_text = int(raw) if raw.isdigit() else number_map.get(tr_lower(raw))
         if ek_count_in_text is None:
             return []
 
