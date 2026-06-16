@@ -1,0 +1,300 @@
+{
+  "test_perfect.docx": [
+    {
+      "text": "T.C.",
+      "section": "header"
+    },
+    {
+      "text": "GEBZE TEKNİK ÜNİVERSİTESİ REKTÖRLÜĞÜ",
+      "section": "header"
+    },
+    {
+      "text": "Mühendislik Fakültesi",
+      "section": "header"
+    },
+    {
+      "text": "Sayı: F.01.2-2025/001\tTarih: 26.05.2025",
+      "section": "sayi_tarih"
+    },
+    {
+      "text": "Konu: Akademik Faaliyet Raporu",
+      "section": "konu"
+    },
+    {
+      "text": "Rektörlük Makamına,",
+      "section": "muhatap"
+    },
+    {
+      "text": "Fakültemiz bünyesinde 2024-2025 eğitim-öğretim yılında gerçekleştirilen akademik etkinliklere ait ayrıntılı bilgiler ilişik belgede yer almaktadır.",
+      "section": "metin"
+    },
+    {
+      "text": "Söz konusu faaliyetlerin değerlendirilmesini ve gereğinin yapılmasını saygılarınıza sunarım.",
+      "section": "metin"
+    },
+    {
+      "text": "Arz ederim.",
+      "section": "kapanis"
+    },
+    {
+      "text": "Prof. Dr. Ahmet Yılmaz",
+      "section": "imza"
+    },
+    {
+      "text": "Dekan",
+      "section": "imza"
+    }
+  ],
+  "ok_ilgi_ek_dagitim.docx": [
+    {
+      "text": "T.C.",
+      "section": "header"
+    },
+    {
+      "text": "GEBZE TEKNİK ÜNİVERSİTESİ REKTÖRLÜĞÜ",
+      "section": "header"
+    },
+    {
+      "text": "Temel Bilimler Fakültesi",
+      "section": "header"
+    },
+    {
+      "text": "Sayı: T.02.1-2025/077\tTarih: 26.05.2025",
+      "section": "sayi_tarih"
+    },
+    {
+      "text": "Konu: Müfredat Güncellemesi",
+      "section": "konu"
+    },
+    {
+      "text": "İlgi: a) Rektörlüğün 04.02.2025 tarih ve 018 sayılı yazısı.",
+      "section": "ilgi"
+    },
+    {
+      "text": "b) Rektörlüğün 11.04.2025 tarih ve 052 sayılı yazısı.",
+      "section": "ilgi"
+    },
+    {
+      "text": "Rektörlük Makamına,",
+      "section": "muhatap"
+    },
+    {
+      "text": "İlgi yazılar doğrultusunda müfredat güncelleme çalışmaları tamamlanmıştır. Hazırlanan belgeler ekte sunulmaktadır.",
+      "section": "metin"
+    },
+    {
+      "text": "Arz ederim.",
+      "section": "kapanis"
+    },
+    {
+      "text": "Prof. Dr. Ahmet Yılmaz",
+      "section": "imza"
+    },
+    {
+      "text": "Dekan",
+      "section": "imza"
+    },
+    {
+      "text": "EK:",
+      "section": "ek"
+    },
+    {
+      "text": "EK-1: Güncel Müfredat Tablosu",
+      "section": "ek"
+    },
+    {
+      "text": "DAĞITIM:",
+      "section": "dagitim"
+    },
+    {
+      "text": "Gereği:",
+      "section": "dagitim"
+    },
+    {
+      "text": "Öğrenci İşleri Dairesi Başkanlığına",
+      "section": "dagitim"
+    },
+    {
+      "text": "Bilgi:",
+      "section": "dagitim"
+    },
+    {
+      "text": "Tüm Bölüm Başkanlıklarına",
+      "section": "dagitim"
+    }
+  ],
+  "b_correct_downward.docx": [
+    {
+      "text": "T.C.",
+      "section": "header"
+    },
+    {
+      "text": "GEBZE TEKNİK ÜNİVERSİTESİ REKTÖRLÜĞÜ",
+      "section": "header"
+    },
+    {
+      "text": "Sayı: R.01.1-2025/200\tTarih: 26.05.2025",
+      "section": "sayi_tarih"
+    },
+    {
+      "text": "Konu: Akreditasyon Belgeleri",
+      "section": "konu"
+    },
+    {
+      "text": "Mühendislik Fakültesi Dekanlığına,",
+      "section": "muhatap"
+    },
+    {
+      "text": "Akreditasyon sürecine ilişkin belgeler hazırlanarak Dekanlığınıza gönderilmektedir.",
+      "section": "metin"
+    },
+    {
+      "text": "Gereğini rica ederim.",
+      "section": "kapanis"
+    },
+    {
+      "text": "Rica ederim.",
+      "section": "kapanis"
+    },
+    {
+      "text": "Prof. Dr. Mehmet Demir",
+      "section": "imza"
+    },
+    {
+      "text": "Rektör",
+      "section": "imza"
+    }
+  ],
+  "ok_short_minimal.docx": [
+    {
+      "text": "T.C.",
+      "section": "header"
+    },
+    {
+      "text": "GEBZE TEKNİK ÜNİVERSİTESİ REKTÖRLÜĞÜ",
+      "section": "header"
+    },
+    {
+      "text": "Mühendislik Fakültesi",
+      "section": "header"
+    },
+    {
+      "text": "Sayı: F.01.2-2025/042\tTarih: 26.05.2025",
+      "section": "sayi_tarih"
+    },
+    {
+      "text": "Konu: Laboratuvar Envanteri",
+      "section": "konu"
+    },
+    {
+      "text": "Rektörlük Makamına,",
+      "section": "muhatap"
+    },
+    {
+      "text": "Fakültemiz laboratuvar envanteri güncellenmiştir.",
+      "section": "metin"
+    },
+    {
+      "text": "Arz ederim.",
+      "section": "kapanis"
+    },
+    {
+      "text": "Prof. Dr. Ahmet Yılmaz",
+      "section": "imza"
+    },
+    {
+      "text": "Dekan",
+      "section": "imza"
+    }
+  ],
+  "mix_ilgili_ekli_complete.docx": [
+    {
+      "text": "T.C.",
+      "section": "header"
+    },
+    {
+      "text": "GEBZE TEKNİK ÜNİVERSİTESİ REKTÖRLÜĞÜ",
+      "section": "header"
+    },
+    {
+      "text": "Mühendislik Fakültesi",
+      "section": "header"
+    },
+    {
+      "text": "Sayı: F.01.2-2025/150\tTarih: 26.05.2025",
+      "section": "sayi_tarih"
+    },
+    {
+      "text": "Konu: Akreditasyon Belgesi Talebi",
+      "section": "konu"
+    },
+    {
+      "text": "İlgi: a) Rektörlüğün 03.02.2025 tarih ve 012 sayılı yazısı.",
+      "section": "ilgi"
+    },
+    {
+      "text": "b) Rektörlüğün 14.04.2025 tarih ve 043 sayılı yazısı.",
+      "section": "ilgi"
+    },
+    {
+      "text": "Rektörlük Makamına,",
+      "section": "muhatap"
+    },
+    {
+      "text": "İlgi yazılar uyarınca akreditasyon süreci başlatılmıştır. Süreçle ilgili 3 adet belge ekte sunulmaktadır.",
+      "section": "metin"
+    },
+    {
+      "text": "Belgelerin incelenerek gereğinin yapılmasını arz ederim.",
+      "section": "kapanis"
+    },
+    {
+      "text": "Arz ederim.",
+      "section": "kapanis"
+    },
+    {
+      "text": "Prof. Dr. Ahmet Yılmaz",
+      "section": "imza"
+    },
+    {
+      "text": "Dekan",
+      "section": "imza"
+    },
+    {
+      "text": "EK:",
+      "section": "ek"
+    },
+    {
+      "text": "EK-1: Akreditasyon Başvuru Formu",
+      "section": "ek"
+    },
+    {
+      "text": "EK-2: Öz Değerlendirme Raporu",
+      "section": "ek"
+    },
+    {
+      "text": "EK-3: Destekleyici Belgeler",
+      "section": "ek"
+    },
+    {
+      "text": "DAĞITIM:",
+      "section": "dagitim"
+    },
+    {
+      "text": "Gereği:",
+      "section": "dagitim"
+    },
+    {
+      "text": "Strateji Geliştirme Daire Başkanlığına",
+      "section": "dagitim"
+    },
+    {
+      "text": "Bilgi:",
+      "section": "dagitim"
+    },
+    {
+      "text": "Tüm Bölüm Başkanlıklarına",
+      "section": "dagitim"
+    }
+  ]
+}

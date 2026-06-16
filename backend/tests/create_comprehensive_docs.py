@@ -1039,6 +1039,177 @@ def make_ok_daire_rektorluk(path: Path) -> None:
     _save(doc, path.name)
 
 
+# ── EKSIK 3: Çeşitli biçimlerde ek referans (doğru) belgeler ──────────────────
+# Farklı muhatap formatları, ilgi/ek varyasyonları, kısa/uzun metin — hepsi
+# kurala uygun; yanlış-alarm (false-positive) ölçeğini büyütür.
+
+def make_ok_short_minimal(path: Path) -> None:
+    """Kısa ama tam ve doğru yazı (tek paragraf gövde)."""
+    doc = Document()
+    _margins(doc)
+    _std_header(doc, konu="Konu: Laboratuvar Envanteri", muhatap="Rektörlük Makamına,")
+    _body(doc, "Fakültemiz laboratuvar envanteri güncellenmiştir.")
+    _std_closing(doc)
+    _save(doc, path.name)
+
+
+def make_ok_long_body(path: Path) -> None:
+    """Uzun, çok paragraflı doğru yazı."""
+    doc = Document()
+    _margins(doc)
+    _std_header(doc, konu="Konu: Yıl Sonu Değerlendirmesi", muhatap="Rektörlük Makamına,")
+    _body(doc, "Fakültemiz 2024-2025 akademik yılı faaliyetleri planlandığı biçimde "
+               "yürütülmüştür. Eğitim, araştırma ve topluma hizmet alanlarında belirlenen "
+               "hedeflere büyük ölçüde ulaşılmıştır.")
+    _body(doc, "Akademik personelin yayın sayısı bir önceki yıla göre artmıştır. "
+               "Lisansüstü program kontenjanları tam olarak doldurulmuştur.")
+    _body(doc, "Söz konusu değerlendirmenin makamınızca incelenmesini arz ederim.")
+    _std_closing(doc)
+    _save(doc, path.name)
+
+
+def make_ok_ilgi_ek_dagitim(path: Path) -> None:
+    """İlgi (doğru sıra) + EK (atıflı) + Dağıtım (Gereği/Bilgi) tam ve doğru."""
+    doc = Document()
+    _margins(doc)
+    _center(doc, "T.C.", bold=True)
+    _center(doc, "GEBZE TEKNİK ÜNİVERSİTESİ REKTÖRLÜĞÜ", bold=True)
+    _center(doc, "Temel Bilimler Fakültesi", bold=True)
+    _sayi_tarih_row(doc, sayi_no="T.02.1-2025/077")
+    _para(doc, "Konu: Müfredat Güncellemesi")
+    _para(doc, "")
+    _para(doc, "İlgi: a) Rektörlüğün 04.02.2025 tarih ve 018 sayılı yazısı.")
+    _para(doc, "     b) Rektörlüğün 11.04.2025 tarih ve 052 sayılı yazısı.")
+    _para(doc, "")
+    _para(doc, "Rektörlük Makamına,")
+    _para(doc, "")
+    _body(doc, "İlgi yazılar doğrultusunda müfredat güncelleme çalışmaları tamamlanmıştır. "
+               "Hazırlanan belgeler ekte sunulmaktadır.")
+    _std_closing(doc)
+    _para(doc, "")
+    _para(doc, "EK:")
+    _para(doc, "EK-1: Güncel Müfredat Tablosu")
+    _para(doc, "")
+    _para(doc, "DAĞITIM:")
+    _para(doc, "Gereği:")
+    _para(doc, "  Öğrenci İşleri Dairesi Başkanlığına")
+    _para(doc, "Bilgi:")
+    _para(doc, "  Tüm Bölüm Başkanlıklarına")
+    _save(doc, path.name)
+
+
+def make_ok_dekanlik_to_bolum(path: Path) -> None:
+    """Dekanlık → Bölüm (alt makama 'Rica ederim' — doğru, tüm alanlar tam)."""
+    doc = Document()
+    _margins(doc)
+    _center(doc, "T.C.", bold=True)
+    _center(doc, "GEBZE TEKNİK ÜNİVERSİTESİ REKTÖRLÜĞÜ", bold=True)
+    _center(doc, "Mimarlık Fakültesi", bold=True)
+    _sayi_tarih_row(doc, sayi_no="M.03.1-2025/240")
+    _para(doc, "Konu: Akademik Takvim Uygulaması")
+    _para(doc, "")
+    _para(doc, "Bölüm Başkanlığına,")
+    _para(doc, "")
+    _body(doc, "Yeni akademik takvimin bölüm genelinde uygulanması gerekmektedir.")
+    _para(doc, "")
+    _para(doc, "Gereğini rica ederim.")
+    _para(doc, "")
+    _para(doc, "Prof. Dr. Ayşe Demir")
+    _para(doc, "Dekan")
+    _save(doc, path.name)
+
+
+def make_ok_onay_olur(path: Path) -> None:
+    """Dekanlık onay yazısı — doğru kapanış 'OLUR' (CLS-003 olmamalı)."""
+    doc = Document()
+    _margins(doc)
+    _center(doc, "T.C.", bold=True)
+    _center(doc, "GEBZE TEKNİK ÜNİVERSİTESİ REKTÖRLÜĞÜ", bold=True)
+    _center(doc, "Mühendislik Fakültesi", bold=True)
+    _sayi_tarih_row(doc, sayi_no="F.01.1-2025/260")
+    _para(doc, "Konu: Görevlendirme Onayı")
+    _para(doc, "")
+    _para(doc, "Bilgisayar Mühendisliği Bölüm Başkanlığına,")
+    _para(doc, "")
+    _body(doc, "Öğretim üyesinin yurt içi görevlendirilmesi uygun görülmüştür.")
+    _para(doc, "")
+    _para(doc, "OLUR")
+    _para(doc, "")
+    _para(doc, "Prof. Dr. Ahmet Yılmaz")
+    _para(doc, "Dekan")
+    _save(doc, path.name)
+
+
+def make_ok_bilgilerinize_arz(path: Path) -> None:
+    """Kapanış varyasyonu 'Bilgilerinize arz ederim.' (doğru)."""
+    doc = Document()
+    _margins(doc)
+    _std_header(doc, birim="Mimarlık Fakültesi",
+                konu="Konu: Etkinlik Bilgilendirmesi", muhatap="Rektörlük Makamına,")
+    _body(doc, "Fakültemizce düzenlenecek sempozyumun programı tamamlanmıştır.")
+    _para(doc, "")
+    _para(doc, "Bilgilerinize arz ederim.")
+    _para(doc, "")
+    _para(doc, "Prof. Dr. Ayşe Demir")
+    _para(doc, "Dekan")
+    _save(doc, path.name)
+
+
+def make_ok_muhatap_sayin(path: Path) -> None:
+    """Muhatap 'Sayın ...' biçiminde (doğru, farklı muhatap formatı)."""
+    doc = Document()
+    _margins(doc)
+    _std_header(doc, birim="İşletme Fakültesi",
+                konu="Konu: Davet", muhatap="Sayın Rektörüm,")
+    _body(doc, "Fakültemizin yıl sonu töreni için katılımınızı bekliyoruz.")
+    _std_closing(doc, name="Prof. Dr. Can Yılmaz", title="Dekan")
+    _save(doc, path.name)
+
+
+def make_ok_arial_long(path: Path) -> None:
+    """Arial 11pt, uzun gövde — doğru biçim (FMT-001 olmamalı)."""
+    doc = Document()
+    _margins(doc)
+    _std_header(doc, konu="Konu: Araştırma Faaliyetleri", muhatap="Rektörlük Makamına,")
+    _body(doc, "Fakültemiz araştırma laboratuvarlarında yürütülen projeler kapsamında "
+               "elde edilen bulgular değerlendirilmiştir.", font="Arial", pt=11.0)
+    _body(doc, "Proje çıktılarının yaygınlaştırılması planlanmaktadır.",
+          font="Arial", pt=11.0)
+    _std_closing(doc)
+    _save(doc, path.name)
+
+
+def make_ok_enstitu_ek(path: Path) -> None:
+    """Enstitü → Rektörlük, EK atıflı (doğru)."""
+    doc = Document()
+    _margins(doc)
+    _std_header(doc, birim="Nanoteknoloji Enstitüsü",
+                konu="Konu: Tez Jürisi Önerisi", muhatap="Rektörlük Makamına,")
+    _body(doc, "Enstitümüz doktora tez jürisi önerisi ekte sunulmaktadır.")
+    _std_closing(doc, name="Prof. Dr. Elif Kara", title="Enstitü Müdürü")
+    _para(doc, "")
+    _para(doc, "EK:")
+    _para(doc, "EK-1: Jüri Üye Listesi")
+    _save(doc, path.name)
+
+
+def make_ok_bolum_dekanlik(path: Path) -> None:
+    """Bölüm → Dekanlık (üst makama 'Arz ederim' — doğru)."""
+    doc = Document()
+    _margins(doc)
+    _center(doc, "T.C.", bold=True)
+    _center(doc, "GEBZE TEKNİK ÜNİVERSİTESİ REKTÖRLÜĞÜ", bold=True)
+    _center(doc, "Mühendislik Fakültesi", bold=True)
+    _sayi_tarih_row(doc, sayi_no="F.01.3-2025/088")
+    _para(doc, "Konu: Ders Görevlendirmesi")
+    _para(doc, "")
+    _para(doc, "Mühendislik Fakültesi Dekanlığına,")
+    _para(doc, "")
+    _body(doc, "Bölümümüz güz dönemi ders görevlendirme önerisi hazırlanmıştır.")
+    _std_closing(doc, name="Prof. Dr. Kemal Arslan", title="Bölüm Başkanı")
+    _save(doc, path.name)
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # Ana akış
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1112,6 +1283,16 @@ COMPREHENSIVE_SPECS: list[tuple[str, str, callable]] = [
     ("ok_arial_font.docx",              "OK: Arial 11pt doğru kullanım",                 make_ok_arial_font),
     ("ok_enstitü_yazisi.docx",          "OK: Enstitü tam ve doğru yazı",                 make_ok_enstitü_yazisi),
     ("ok_daire_rektorluk.docx",         "OK: Daire Başkanlığı→Rektörlük doğru",          make_ok_daire_rektorluk),
+    ("ok_short_minimal.docx",           "OK: Kısa ama tam yazı",                         make_ok_short_minimal),
+    ("ok_long_body.docx",               "OK: Uzun çok paragraflı yazı",                  make_ok_long_body),
+    ("ok_ilgi_ek_dagitim.docx",         "OK: İlgi+EK+Dağıtım tam ve doğru",              make_ok_ilgi_ek_dagitim),
+    ("ok_dekanlik_to_bolum.docx",       "OK: Dekanlık→Bölüm 'Rica ederim'",              make_ok_dekanlik_to_bolum),
+    ("ok_onay_olur.docx",               "OK: Dekanlık onay yazısı 'OLUR'",               make_ok_onay_olur),
+    ("ok_bilgilerinize_arz.docx",       "OK: Kapanış 'Bilgilerinize arz ederim.'",       make_ok_bilgilerinize_arz),
+    ("ok_muhatap_sayin.docx",           "OK: Muhatap 'Sayın ...' biçimi",                make_ok_muhatap_sayin),
+    ("ok_arial_long.docx",              "OK: Arial 11pt uzun gövde",                     make_ok_arial_long),
+    ("ok_enstitu_ek.docx",              "OK: Enstitü EK atıflı",                         make_ok_enstitu_ek),
+    ("ok_bolum_dekanlik.docx",          "OK: Bölüm→Dekanlık 'Arz ederim'",               make_ok_bolum_dekanlik),
 ]
 
 

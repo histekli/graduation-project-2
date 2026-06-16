@@ -17,7 +17,7 @@ from app.models.finding import (
     ParsedDocument, ParsedParagraph, DocumentSection
 )
 from app.rules.hierarchy import FACULTIES, INSTITUTES, DEPARTMENTS
-from app.services.turkish_text import tr_upper, is_closing_line
+from app.services.turkish_text import tr_upper, tr_lower, is_closing_line
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +48,38 @@ _KNOWN_UNITS_UPPER = [tr_upper(name) for name in _KNOWN_UNITS]
 def _matches_known_unit(text: str) -> bool:
     upper_text = tr_upper(text)
     return any(unit in upper_text for unit in _KNOWN_UNITS_UPPER)
+
+
+# Resmî yazıda muhatap (alıcı) satırı tipik olarak bir makam/birim ekiyle ve
+# virgülle biter ("...Makamına,", "...Dekanlığına,") veya "Sayın ..." ile başlar.
+_MUHATAP_SUFFIXES = (
+    "makamına", "makamına,",
+    "başkanlığına", "başkanlıklarına",
+    "dekanlığına", "dekanlıklarına",
+    "müdürlüğüne", "müdürlüklerine",
+    "rektörlüğüne", "rektörlüğüne,",
+    "bakanlığına", "valiliğine",
+    "daire başkanlığına", "genel müdürlüğüne",
+    "birimlere", "birimine", "birimlerine",
+)
+
+
+def _looks_like_muhatap(text: str) -> bool:
+    """Bir satırın muhatap (alıcı) satırı olup olmadığını skorlu olarak değerlendirir.
+
+    Tek bir konuma güvenmek yerine biçim + anahtar kelime ipuçlarını birleştirir:
+      • aşırı uzun değil (≤ 200 karakter),
+      • "Sayın ..." ile başlıyor, VEYA
+      • bir alıcı ekiyle (Makamına/Dekanlığına/Başkanlığına...) ve genellikle
+        virgülle bitiyor.
+    """
+    if not text or len(text) > 200:
+        return False
+    t = tr_lower(text.strip())
+    if t.startswith("sayın "):
+        return True
+    stripped = t.rstrip(" ,.")
+    return stripped.endswith(_MUHATAP_SUFFIXES)
 
 
 def _get_doc_default_font(doc: Document) -> tuple[str | None, float | None]:
@@ -304,13 +336,16 @@ def parse_docx(file_path: str | Path, original_filename: str | None = None) -> P
             header_done = True
             continue
         
-        # Muhatap (konu'dan sonra, ilgi/metin'den önce)
-        if konu_done and not metin_started and not ilgi_active:
-            if not _RE_ILGI.match(text) and not _RE_EK.match(text):
-                if parsed.muhatap is None and len(text) < 200:
-                    pp.section = DocumentSection.MUHATAP
-                    parsed.muhatap = text
-                    continue
+        # Muhatap (alıcı) — skorlu tespit. Konu sonrası, metin başlamadan; İlgi
+        # bloğundan SONRA gelse bile yakalanır (eski "ilk satır" sezgisi İlgi'den
+        # sonra muhatabı kaçırıyordu). _looks_like_muhatap biçim + anahtar kelime
+        # ipuçlarını birleştirir, böylece gövde cümleleri yanlışlıkla muhatap olmaz.
+        if konu_done and not metin_started and parsed.muhatap is None:
+            if _looks_like_muhatap(text):
+                pp.section = DocumentSection.MUHATAP
+                parsed.muhatap = text
+                ilgi_active = False
+                continue
         
         # İlgi
         if _RE_ILGI.match(text):
@@ -374,6 +409,10 @@ def parse_docx(file_path: str | Path, original_filename: str | None = None) -> P
             pp.section = DocumentSection.METIN
             parsed.metin_paragraphs.append(pp.index)
             metin_started = True
+        else:
+            # Hiçbir bölüme atanamadı — sessizce yanlış atama yapmak yerine paragrafı
+            # UNKNOWN'da bırak ve logla (tanı/iyileştirme için izlenebilir).
+            logger.debug("Parser: sınıflandırılamayan paragraf → unknown: %r", text[:60])
     
     # Tarih'i sayı satırından çıkar (eğer ayrı yoksa)
     if parsed.tarih is None and parsed.sayi:

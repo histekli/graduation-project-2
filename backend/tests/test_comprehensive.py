@@ -726,6 +726,17 @@ class TestFalsePositives:
         "ok_arial_font.docx",
         "ok_enstitü_yazisi.docx",
         "ok_daire_rektorluk.docx",
+        # EKSIK 3: genişletilmiş referans belge seti (farklı biçimsel varyasyonlar)
+        "ok_short_minimal.docx",
+        "ok_long_body.docx",
+        "ok_ilgi_ek_dagitim.docx",
+        "ok_dekanlik_to_bolum.docx",
+        "ok_onay_olur.docx",
+        "ok_bilgilerinize_arz.docx",
+        "ok_muhatap_sayin.docx",
+        "ok_arial_long.docx",
+        "ok_enstitu_ek.docx",
+        "ok_bolum_dekanlik.docx",
         "b_correct_upward.docx",
         "b_correct_downward.docx",
         "c_sem_correct.docx",
@@ -739,6 +750,13 @@ class TestFalsePositives:
         findings = LayerA().run(doc)
         errors = [f.rule_code for f in findings if f.severity.value == "error"]
         assert not errors, f"[{filename}] false positive error: {errors}"
+
+    def test_reference_docs_zero_false_alarms(self):
+        """EKSIK 3: Genişletilmiş ok_* setinde toplam yanlış-alarm eşiği (regresyon)."""
+        total = 0
+        for path in sorted(FIXTURES.glob("ok_*.docx")):
+            total += len(LayerA().run(_parse(path.name)))
+        assert total <= 3, f"ok_* referans belgelerinde toplam {total} bulgu (eşik 3)"
 
     def test_arial_font_no_fmt_error(self):
         """Arial 11pt mükemmel belgede FMT-001 olmamalı."""

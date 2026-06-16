@@ -109,6 +109,23 @@ Kullanıcı .docx yükler
 
 `mode` parametresi: `"full"` (3 katman) · `"format_only"` (sadece A — deterministik biçim **ve** içerik kuralları) · `"content_only"` (B + C)
 
+### Parser Güvenilirliği (Bölüm Tespiti)
+
+Parser, paragrafları 12 bölüme ayırırken tek bir regex yerine **anahtar kelime + konum + biçim ipuçlarını** birleştirir. Örneğin muhatap (alıcı) satırı, "ilk satır" sezgisiyle değil; alıcı ekleriyle (`...Makamına,`, `...Dekanlığına,`) ya da `Sayın ...` kalıbıyla skorlanarak tespit edilir (İlgi bloğundan sonra gelse bile yakalanır). Hiçbir kalıba uymayan paragraf sessizce yanlış atanmaz, `unknown`'da bırakılıp loglanır.
+
+**Ölçüm:** [`tests/fixtures/section_labels.json`](backend/tests/fixtures/section_labels.json) içinde 5 belge / 72 paragraf elle etiketlenmiştir. Parser tahmini bu ground-truth ile karşılaştırılır ([`tests/test_parser_metrics.py`](backend/tests/test_parser_metrics.py)):
+
+| Metrik | Değer |
+|--------|-------|
+| Genel doğruluk (accuracy) | **%97.2** (70/72 paragraf) |
+| Makro F1 | **0.974** |
+| Kusursuz (F1=1.0) bölümler | header, sayi_tarih, konu, muhatap, ilgi, ek, dagitim, metin |
+| En zayıf bölüm | `kapanis` (R=0.71) — belgedeki **yedek/ikinci** kapanış ifadesi imza bloğuna karışabiliyor (bilinen sınır) |
+
+Eşik altına düşülürse (`accuracy < 0.90` veya `macro-F1 < 0.85`) test başarısız olur (regresyon koruması).
+
+**Yanlış-alarm (false-positive):** 13 adet `ok_*` referans belgesi (farklı muhatap formatları, ilgi/ek varyasyonları, kısa/uzun metin, Arial/TNR) üzerinde Katman A **0 error/warning** ve **toplam 0 bulgu** üretir. Eşik aşılırsa test başarısız olur ([`TestReferenceFalsePositives`](backend/tests/test_parser_metrics.py), `TestFalsePositives`).
+
 ---
 
 ## Kural Kodları
@@ -928,18 +945,21 @@ curl -X POST http://localhost:8000/analyze-and-fix \
 
 ## Test Altyapısı
 
-### Test Belgeleri (60 Senaryo)
+### Test Belgeleri (76 Senaryo)
 
-`backend/tests/fixtures/` altında 60 programatik test belgesi:
+`backend/tests/fixtures/` altında 76 programatik test belgesi:
 
 | Grup | Adet | Kapsam |
 |------|------|--------|
-| `a_*` | 25 | Katman A: FMT, FLD, CLS, LNG, SEM-002 |
+| `a_*` | 26 | Katman A: FMT, FLD, CLS, LNG + deterministik içerik (SEM-002, SEM-006) |
 | `b_*` | 10 | Katman B: HIR-001..005 + doğru örnekler |
-| `c_*` | 8 | Katman C: SEM-001..004 + doğru örnek |
+| `c_*` | 8 | Katman C: SEM-001/003/004 + doğru örnek |
 | `mix_*` | 7 | Çok katmanlı senaryolar |
-| `ok_*` | 3 | Referans belgeler (false-positive kontrolü) |
+| `infl_*` | 4 | Türkçe kapanış çekim varyasyonları (arz edilmektedir/olunur/ederiz) |
+| `ok_*` | 13 | Referans belgeler (false-positive kontrolü, farklı biçimsel varyasyonlar) |
 | `test_*` | 8 | Temel senaryo belgeleri (test_all_errors dahil) |
+
+Ayrıca [`tests/fixtures/section_labels.json`](backend/tests/fixtures/section_labels.json): bölüm tespiti için elle doğrulanmış ground-truth (5 belge, 72 paragraf).
 
 ```bash
 # Test belgelerini oluştur
@@ -948,29 +968,22 @@ python -m tests.create_comprehensive_docs
 python -m tests.create_test_docs
 ```
 
-`test_all_errors.docx`: LNG-001..007, FMT-001/002, HIR-001 ve Layer C bulgularını aynı anda tetikleyen kapsamlı test belgesi (23 bulgu).
+`test_all_errors.docx`: LNG-001..007, FMT-001/002, HIR-001 ve Layer C bulgularını aynı anda tetikleyen kapsamlı test belgesi.
 
-### Test Sınıfları (test_comprehensive.py)
+### Test Modülleri (~198 test)
 
 ```
-TestLayerAFont          → FMT-001 (4 test)
-TestLayerAMargin        → FMT-002 (2 test)
-TestLayerAMandatoryFields → FLD-001..007 (8 test)
-TestLayerAClosing       → CLS-001..003 (4 test)
-TestLayerALanguage      → LNG-001..008 (5 test)
-TestLayerAEkCount       → SEM-002 deterministik (3 test)
-TestLayerBHIR001        → Hiyerarşi kapanış (4 test)
-TestLayerBHIR002        → Rektör a. tespiti (2 test)
-TestLayerBHIR003        → İlgi sıralaması (3 test)
-TestLayerBHIR004        → Dağıtım ayrımı (3 test)
-TestLayerBHIR005        → Hiyerarşi atlama (2 test)
-TestLayerBNoChromaDB    → ChromaDB olmadan graceful degradation
-TestLayerCInactive      → API anahtarsız çalışma
-TestLayerCMock          → Sahte LLM yanıtı ile parse testi
-TestLayerCRealAPI       → Gerçek Gemini API testi (kota yoksa skip)
-TestPipelineMultiLayer  → Çok katmanlı entegrasyon
-TestFalsePositives      → Doğru belgelerde yanlış alarm tespiti
+test_comprehensive.py   → Katman A/B/C senaryoları + TestFalsePositives (genişletilmiş ok_* seti)
+test_scenarios.py       → Senaryo tabanlı entegrasyon (A/B/C/pipeline)
+test_pipeline.py        → Pipeline entegrasyonu
+test_turkish_text.py    → tr_lower/tr_upper + çekim-toleranslı kapanış (EKSIK 5)
+test_embeddings.py      → EmbeddingProvider, e5/hash, fallback, metadata (EKSIK 1)
+test_scoring.py         → Kural-ağırlıklı uyum skoru (EKSIK 2)
+test_layer_integrity.py → Bulgu 'layer' alanı doğruluğu, Katman C = LLM-only (EKSIK 4)
+test_parser_metrics.py  → Bölüm tespiti P/R/F1 + ok_* yanlış-alarm eşiği (EKSIK 3)
 ```
+
+**Ölçülen metrikler:** bölüm tespiti accuracy **%97.2** / macro-F1 **0.974** (72 paragraf); `ok_*` referans belgelerinde **0 yanlış-alarm**. Bkz. [Parser Güvenilirliği](#parser-güvenilirliği-bölüm-tespiti).
 
 ---
 
@@ -988,19 +1001,21 @@ dean-office-helper/
 │   │   │                            # Finding · ParsedDocument · AnalysisResult
 │   │   │                            # Severity · Layer · DocumentSection
 │   │   ├── services/
-│   │   │   ├── parser.py            # .docx ayrıştırıcı (12 bölüm tespiti)
-│   │   │   ├── layer_a.py           # Deterministik kural motoru (20 kural)
+│   │   │   ├── parser.py            # .docx ayrıştırıcı (12 bölüm, skorlu muhatap tespiti)
+│   │   │   ├── turkish_text.py      # Türkçe tr_lower/tr_upper + çekim-toleranslı kapanış
+│   │   │   ├── layer_a.py           # Deterministik motor (biçim/alan/dil + SEM-002/006)
 │   │   │   ├── layer_b.py           # RAG destekli kontrol (HIR-001..005)
-│   │   │   ├── layer_c.py           # Semantik analiz (Gemini/Claude)
+│   │   │   ├── layer_c.py           # YALNIZCA LLM semantik analiz (Gemini/Groq)
 │   │   │   │                        # _from_config() · save_config() · hot-reload
-│   │   │   │                        # found_text + suggested_text çıktısı
 │   │   │   ├── fixer.py             # Belge düzeltici (11 otomatik kural) + rapor tablosu
 │   │   │   └── pipeline.py          # Orkestratör · ChromaDB auto-ingest · uyum skoru
 │   │   ├── rules/
-│   │   │   └── hierarchy.py         # GTU org. hiyerarşisi + kapanış kuralları tablosu
+│   │   │   ├── hierarchy.py         # GTU org. hiyerarşisi + kapanış kuralları tablosu
+│   │   │   └── scoring_weights.py   # Kural-ağırlıklı uyum skoru (KRİTİK/ORTA/DÜŞÜK)
 │   │   └── rag/
-│   │       ├── ingest.py            # Çok-format döküman yükleyici (PDF/DOCX/JSON/TXT)
-│   │       └── retriever.py         # Hibrit ChromaDB arama (kaynak filtreli)
+│   │       ├── embeddings.py        # EmbeddingProvider: SentenceTransformer + hash fallback
+│   │       ├── ingest.py            # Çok-format yükleyici + koleksiyon embedding metadata
+│   │       └── retriever.py         # Hibrit ChromaDB arama (query_embeddings, kaynak filtreli)
 │   ├── data/
 │   │   ├── guidelines/              # Kaynak belgeler (6 dosya)
 │   │   │   ├── YÖ-0030...R5.pdf    # GTU Yazışma Yönergesi
@@ -1013,12 +1028,18 @@ dean-office-helper/
 │   │   ├── chromadb/               # ChromaDB vektör veritabanı (569 chunk, gitignore)
 │   │   └── api_config.json         # UI'dan kaydedilen API anahtarı (gitignore)
 │   ├── tests/
-│   │   ├── fixtures/               # 60 test belgesi (programatik)
-│   │   ├── create_comprehensive_docs.py  # 52 senaryo oluşturucu
+│   │   ├── fixtures/               # 76 test belgesi + section_labels.json (ground-truth)
+│   │   ├── create_comprehensive_docs.py  # senaryo + ok_* + infl_* oluşturucu
 │   │   ├── create_test_docs.py     # 8 temel senaryo oluşturucu
-│   │   ├── test_comprehensive.py   # 95 test (sınıf tabanlı)
-│   │   ├── test_scenarios.py       # 22 senaryo testi
-│   │   └── test_pipeline.py        # Pipeline entegrasyon
+│   │   ├── test_comprehensive.py   # Katman A/B/C senaryoları + FP
+│   │   ├── test_scenarios.py       # Senaryo entegrasyonu
+│   │   ├── test_pipeline.py        # Pipeline entegrasyon
+│   │   ├── test_turkish_text.py    # Türkçe normalizasyon + çekim (EKSIK 5)
+│   │   ├── test_embeddings.py      # EmbeddingProvider + fallback (EKSIK 1)
+│   │   ├── test_scoring.py         # Ağırlıklı skor (EKSIK 2)
+│   │   ├── test_layer_integrity.py # Katman ayrımı (EKSIK 4)
+│   │   └── test_parser_metrics.py  # Bölüm tespiti F1 + FP eşiği (EKSIK 3)
+│   ├── scripts/                    # embedding_compare.py · score_compare.py
 │   ├── Dockerfile
 │   ├── entrypoint.sh               # ChromaDB yoksa ingest → uvicorn
 │   └── requirements.txt
