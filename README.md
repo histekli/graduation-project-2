@@ -439,7 +439,7 @@ Yüklenen TDK kuralları: noktalama işaretleri, büyük/küçük harf, kısaltm
 | Sağlayıcı | Model | Kullanım |
 |-----------|-------|----------|
 | Google Gemini | `gemini-2.5-flash` (varsayılan) | Birincil — ücretsiz kota |
-| Anthropic Claude | `claude-haiku-4-5-20251001` | Opsiyonel — karşılaştırma |
+| Groq / Llama | `llama-3.3-70b-versatile` | Yedek — ücretsiz tier |
 
 > **Önemli:** `gemini-2.0-flash` yeni ücretsiz hesaplarda kota sıfırdır. `gemini-2.5-flash` kullanın.
 
@@ -508,7 +508,7 @@ API anahtarı sunucu yeniden başlatılmadan değiştirilebilir:
 
 1. "Sistem Durumu" panelini aç
 2. "Anahtarı Değiştir" butonuna tıkla
-3. Sağlayıcı seç (Gemini / Claude)
+3. Sağlayıcı seç (Gemini / Groq)
 4. API anahtarı ve model adı gir
 5. "Kaydet & Aktifleştir" — backend anında hot-reload yapar
 
