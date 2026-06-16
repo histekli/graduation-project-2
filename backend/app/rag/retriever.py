@@ -4,10 +4,13 @@ ChromaDB'den hibrit arama (semantic + kaynak filtreli).
 Katman B tarafından kullanılır.
 """
 from __future__ import annotations
+import logging
 from pathlib import Path
 from typing import Optional
 
 import chromadb
+
+logger = logging.getLogger(__name__)
 
 CHROMA_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "chromadb"
 COLLECTION_NAME = "guidelines"
@@ -88,11 +91,15 @@ class GuidelineRetriever:
         # Sorguyu manuel vektörle (e5 için "query:" prefix uygulanır); ChromaDB'nin
         # query_texts yolu doküman prefix'ini ("passage:") uygulayacağı için kullanılmaz.
         query_vec = self.embedding_fn.embed_query(query)
-        results = self.collection.query(
-            query_embeddings=[query_vec],
-            n_results=n,
-            where=where_filter,
-        )
+        try:
+            results = self.collection.query(
+                query_embeddings=[query_vec],
+                n_results=n,
+                where=where_filter,
+            )
+        except Exception as exc:
+            logger.warning("ChromaDB sorgu başarısız (bozuk collection?): %s", exc)
+            return []
 
         output: list[dict] = []
         if results and results["documents"]:

@@ -25,13 +25,31 @@ _DEFAULT_CHROMA_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "
 _GUIDELINES_DIR     = Path(__file__).resolve().parent.parent.parent / "data" / "guidelines"
 
 
+def _chromadb_is_healthy(chroma_dir: Path) -> bool:
+    """Collection'ın gerçekten sorgulanabilir durumda olduğunu doğrular."""
+    try:
+        import chromadb as _chromadb
+        client = _chromadb.PersistentClient(path=str(chroma_dir))
+        from app.rag.retriever import COLLECTION_NAME
+        col = client.get_collection(COLLECTION_NAME)
+        col.count()  # count metadatadan gelir — segment dosyalarına dokunmaz
+        # Gerçek segment erişimi: tek bir peek ile dosyaların var olduğunu doğrula
+        col.peek(limit=1)
+        return True
+    except Exception as exc:
+        logger.warning("ChromaDB sağlık kontrolü başarısız: %s", exc)
+        return False
+
+
 def _ensure_chromadb(chroma_dir: Path) -> None:
-    """ChromaDB dizini yoksa/boşsa VEYA embedding modeli değiştiyse otomatik ingest eder."""
+    """ChromaDB dizini yoksa/boşsa/bozuksa VEYA embedding modeli değiştiyse otomatik ingest eder."""
     needs_ingest = False
     reason = ""
 
     if not (chroma_dir.exists() and any(chroma_dir.iterdir())):
         needs_ingest, reason = True, "ChromaDB boş"
+    elif not _chromadb_is_healthy(chroma_dir):
+        needs_ingest, reason = True, "ChromaDB bozuk (segment dosyaları eksik)"
     else:
         # Embedding modeli koleksiyonla uyuşuyor mu? Uyuşmuyorsa vektör uzayı
         # geçersizdir (ör. hash → multilingual-e5 geçişi) → yeniden ingest.
