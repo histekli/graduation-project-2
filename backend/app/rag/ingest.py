@@ -266,42 +266,24 @@ def auto_ingest_directory(guidelines_dir: Path) -> list[dict]:
 
 
 # ── Embedding ────────────────────────────────────────────────────────────────
+# Embedding sağlayıcıları app.rag.embeddings içinde tanımlıdır. SimpleHashEmbedding
+# yalnızca fallback'tir; varsayılan SentenceTransformerEmbedding (multilingual-e5).
+from app.rag.embeddings import (  # noqa: E402  (geriye dönük import yolu için)
+    SimpleHashEmbedding,
+    SentenceTransformerEmbedding,
+    get_embedding_provider,
+)
 
-class SimpleHashEmbedding:
-    """
-    Karakter n-gram hash tabanlı embedding fonksiyonu.
-    Ağ bağlantısı gerektirmez. Prod'da sentence-transformers ile değiştirilecek.
-    """
-    def __init__(self, dim: int = 384):
-        self.dim = dim
-        self._name = "simple_hash_384"
 
-    def name(self) -> str:
-        return self._name
-
-    def _embed(self, texts: list[str]) -> list[list[float]]:
-        import hashlib
-        import math
-        results = []
-        for text in texts:
-            text_lower = text.lower()
-            vec = [0.0] * self.dim
-            for i in range(len(text_lower) - 2):
-                ngram = text_lower[i:i + 3]
-                h = int(hashlib.md5(ngram.encode()).hexdigest(), 16)
-                vec[h % self.dim] += 1.0
-            norm = math.sqrt(sum(x * x for x in vec)) or 1.0
-            results.append([x / norm for x in vec])
-        return results
-
-    def __call__(self, input: list[str]) -> list[list[float]]:
-        return self._embed(input)
-
-    def embed_documents(self, input: list[str]) -> list[list[float]]:
-        return self._embed(input)
-
-    def embed_query(self, input: list[str]) -> list[list[float]]:
-        return self._embed(input)
+def read_collection_embedding_model(persist_dir: str | Path) -> str | None:
+    """Var olan koleksiyonun metadata'sındaki embedding model adını döndürür (yoksa None)."""
+    try:
+        client = chromadb.PersistentClient(path=str(persist_dir))
+        col = client.get_collection(COLLECTION_NAME)
+        meta = col.metadata or {}
+        return meta.get("embedding_model")
+    except Exception:
+        return None
 
 
 # ── ChromaDB koleksiyon yönetimi ─────────────────────────────────────────────
@@ -309,12 +291,15 @@ class SimpleHashEmbedding:
 def build_collection(
     documents: list[dict],
     persist_dir: str | Path | None = None,
+    provider=None,
 ) -> chromadb.Collection:
     """
     Koleksiyonu oluşturur veya mevcut olanı temizleyip günceller.
 
-    delete + create yerine get_or_create + clear + upsert kullanılır;
-    böylece koleksiyonun UUID'si korunur ve çalışan server süreçleri
+    Embedding modeli koleksiyon metadata'sına ("embedding_model") yazılır. Mevcut
+    koleksiyon FARKLI bir modelle oluşturulmuşsa (boyut/uzay uyumsuz olabilir)
+    koleksiyon silinip yeniden yaratılır. Aksi halde get_or_create + clear + upsert
+    kullanılır; böylece koleksiyonun UUID'si korunur ve çalışan server süreçleri
     yeniden başlatılmadan güncellemeyi görür.
     """
     client = (
@@ -323,12 +308,35 @@ def build_collection(
         else chromadb.Client()
     )
 
-    embedding_fn = SimpleHashEmbedding(dim=384)
+    embedding_fn = provider or get_embedding_provider()
+    model_name = embedding_fn.name()
+    col_metadata = {
+        "description": "GTU resmi yazışma kılavuz ve yönergeleri",
+        "embedding_model": model_name,
+        "embedding_dim": getattr(embedding_fn, "dim", 384),
+    }
+
+    # Model değiştiyse eski koleksiyonu sil (vektör uzayı uyumsuz) — yeniden yarat.
+    try:
+        existing = client.get_collection(COLLECTION_NAME)
+        prev_model = (existing.metadata or {}).get("embedding_model")
+        if prev_model is not None and prev_model != model_name:
+            print(f"    ⟳ embedding modeli değişti ({prev_model} → {model_name}); "
+                  f"koleksiyon yeniden oluşturuluyor")
+            client.delete_collection(COLLECTION_NAME)
+    except Exception:
+        pass  # koleksiyon yok — get_or_create yaratacak
+
     collection = client.get_or_create_collection(
         name=COLLECTION_NAME,
-        metadata={"description": "GTU resmi yazışma kılavuz ve yönergeleri"},
+        metadata=col_metadata,
         embedding_function=embedding_fn,
     )
+    # get_or_create var olan koleksiyonun metadata'sını güncellemez; modeli yaz.
+    try:
+        collection.modify(metadata=col_metadata)
+    except Exception:
+        pass
 
     # Mevcut tüm dökümanları temizle (UUID değişmez)
     existing_ids = collection.get(include=[])["ids"]

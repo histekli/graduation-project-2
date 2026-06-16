@@ -68,7 +68,8 @@ Kullanıcı .docx yükler
 ┌─────────────────────────────────────────────────────────────┐
 │  KATMAN B — RAG Destekli Kuralsal Kontrol (layer_b.py)      │
 │  · ChromaDB (569 chunk, 6 kaynak)                            │
-│  · SimpleHashEmbedding (384 boyut, offline)                  │
+│  · Anlamsal embedding: multilingual-e5-small (384 boyut)    │
+│    (model yüklenemezse hash fallback — düşük kalite)        │
 │  · HIR-001..005: Hiyerarşi, ilgi, dağıtım kuralları        │
 │  · Her bulgu için yönerge maddesi referansı                  │
 │  · Kaynak bulunamazsa sessizce atlanır                       │
@@ -205,17 +206,21 @@ Katman B, yönerge maddelerine dayalı bulgu üretmek için ChromaDB vektör ver
 
 ### Otomatik Yükleme (Auto-Ingest)
 
-`Pipeline.__init__()` başlatıldığında ChromaDB dizini boş veya yoksa `_ensure_chromadb()` devreye girer:
+`Pipeline.__init__()` başlatıldığında ChromaDB dizini boş/yoksa **veya** koleksiyonun embedding modeli aktif modelden farklıysa `_ensure_chromadb()` yeniden ingest tetikler:
 
 ```python
 # pipeline.py
 def _ensure_chromadb(chroma_dir: Path) -> None:
-    if chroma_dir.exists() and any(chroma_dir.iterdir()):
-        return  # Zaten yüklü
-    run_ingest(data_dir=..., persist_dir=chroma_dir)  # Otomatik ingest
+    if not (chroma_dir.exists() and any(chroma_dir.iterdir())):
+        ...  # boş → ingest
+    else:
+        stored  = read_collection_embedding_model(chroma_dir)
+        current = get_embedding_provider().name()
+        if stored != current:               # ör. hash → multilingual-e5 geçişi
+            ...  # vektör uzayı geçersiz → yeniden ingest
 ```
 
-İlk başlatmada `data/guidelines/` dizinindeki tüm dosyalar taranır ve ChromaDB'ye yüklenir (~30 sn).
+İlk başlatmada `data/guidelines/` dizinindeki tüm dosyalar taranır ve ChromaDB'ye yüklenir (~30 sn). Embedding modeli `EMBEDDING_MODEL` ile değiştirildiğinde koleksiyon otomatik olarak yeniden oluşturulur.
 
 ### Chunk Stratejisi
 
@@ -240,24 +245,42 @@ retriever.search_all("resmi yazı font boyutu", k=5)
 retriever.search(query, source_types=["gtu_yonerge", "cb_kilavuzu"])
 ```
 
-### Embedding: SimpleHashEmbedding
+### Embedding: Anlamsal Model (multilingual-e5)
 
-Türkçe için özel bir embedding modeli gerekmeyecek şekilde offline çalışan, karakter n-gram hash tabanlı vektör üretici:
+Katman B'nin retrieval kalitesi tamamen embedding'in anlamı yakalayabilmesine bağlıdır. Bu yüzden tek bir **`EmbeddingProvider`** soyutlaması altında iki implementasyon vardır ([`app/rag/embeddings.py`](backend/app/rag/embeddings.py)):
 
-```python
-class SimpleHashEmbedding:
-    """384 boyutlu karakter trigram hash embedding."""
-    def _embed(self, texts):
-        for text in texts:
-            vec = [0.0] * 384
-            for i in range(len(text) - 2):
-                ngram = text[i:i+3].lower()
-                h = int(md5(ngram).hexdigest(), 16)
-                vec[h % 384] += 1.0
-            # L2 normalize
+| Sağlayıcı | Ne zaman | Kalite |
+|-----------|----------|--------|
+| **`SentenceTransformerEmbedding`** (varsayılan) | Model yüklenebiliyorsa | Gerçek anlamsal, çok-dilli (Türkçe dahil) |
+| **`SimpleHashEmbedding`** (fallback) | Model indirilemez/paket yoksa | Anlamsal **değil** — yalnızca yüzeysel; loglara açık uyarı basar |
+
+- **Varsayılan model:** `intfloat/multilingual-e5-small` (≈120 MB, 384 boyut, CPU'da çalışır). `EMBEDDING_MODEL` ortam değişkeniyle değiştirilebilir (ör. `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`).
+- **e5 prefix'leri:** e5 ailesi sorgu ve dokümanları farklı işaretler. Dokümanlar `passage:`, sorgular `query:` ön ekiyle vektörlenir. Retriever sorguyu manuel vektörleyip `query_embeddings` ile arar; böylece sorguya yanlışlıkla `passage:` uygulanmaz.
+- **Koleksiyon metadata + otomatik yeniden ingest:** Kullanılan model adı koleksiyon metadata'sına (`embedding_model`) yazılır. Pipeline başlarken aktif model ile koleksiyondaki model farklıysa (ör. hash → e5 geçişi) otomatik olarak yeniden ingest tetiklenir; eski vektör uzayı çöp olmaz.
+- **Fallback davranışı:** Model yüklenemezse uygulama çökmez; `SimpleHashEmbedding`'e düşülür ve `/status` çıktısının `B.detail` alanında `embedding: fallback (hash) — düşük kalite` görünür.
+
+#### Hash neden yetersizdi? (sayısal kanıt)
+
+`python -m scripts.embedding_compare` — anlamca yakın ama **farklı kelimelerle** yazılmış 5 sorgu–doküman çifti üzerinde cosine benzerliği:
+
+```
+İlgili çiftte ortalama cosine:   hash=0.274   anlamsal=0.843   (×3.1 daha yüksek)
+Anlamsal modelin daha yüksek olduğu sorgu sayısı: 5/5
 ```
 
-> **Prod notu:** Üretim ortamında `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` veya `intfloat/multilingual-e5-small` ile değiştirilmesi önerilir.
+Çarpıcı örnek: *"üst makama yazılan yazıda yanlış kapanış"* sorgusu için hash embedding, anlamca ilgili kapanış maddesine (0.193) **alan dışı bir cümleden ("patates haşlama süresi", 0.252) daha düşük** skor verir — yani yanlış belgeyi öne çıkarır. Anlamsal model 5 sorgunun tamamında ilgili maddeyi üstte tutar. (e5 mutlak benzerlik tabanı yüksektir; bu nedenle önemli olan göreli sıralamadır.)
+
+#### Gerçek retrieval örneği (kabul kriteri)
+
+`retriever.search_by_rule("kapanış ifadesi arz ederim üst makam hiyerarşi")` (569 chunk'lık gerçek koleksiyon, e5):
+
+```
+1. [Resmi Yazışma Yönetmeliği — Ek Örnekler | Madde 17]  "| Durum | Doğru İfade | ..."
+2. [Resmi Yazışma Yönetmeliği — Ek Örnekler | Madde 17]  "Gereği için alt makam | Gereğini rica ederim | Onay yazılarında | OLUR"
+3. [Resmi Yazışma Yönetmeliği — Ek Örnekler | Bölüm 1]   "ÖRNEK 19/B ..."
+```
+
+İlk iki sonuç, HIR-001'in dayandığı **kapanış-hiyerarşi tablosu** maddesidir.
 
 ---
 
@@ -389,6 +412,7 @@ Anahtar `data/api_config.json` dosyasına yazılır (`.gitignore`'da, git'e gitm
 - [Docker](https://docs.docker.com/get-docker/) ≥ 24
 - [Docker Compose](https://docs.docker.com/compose/install/) ≥ 2.20
 - Google Gemini API anahtarı ([ücretsiz](https://aistudio.google.com/app/apikey))
+- **Bellek/disk:** Katman B anlamsal embedding modeli (`multilingual-e5-small`) ≈120 MB indirilir ve ≈400 MB RAM kullanır. İmaj derlenirken modele bir kez internet gerekir (sonra imaja gömülür, çalışma anı offline'dır). **512 MB'lık Free planlarda OOM riski** vardır; bu durumda model yüklenemez ve düşük kaliteli hash fallback devreye girer — anlamsal retrieval için ≥2 GB RAM (DigitalOcean Droplet) önerilir.
 
 ### Başlatma
 
@@ -566,7 +590,7 @@ Tarayıcı ──▶ Vercel (Next.js frontend)  ──fetch──▶  Render (Fa
    | `CORS_ORIGINS` | şimdilik `*` (Vercel URL belli olunca güncellenecek) |
 
    > `PORT` **GİRME** — Render otomatik enjekte eder, `entrypoint.sh` bu değeri kullanır (`--port ${PORT:-8000}`).
-4. **Create / Apply** — Render imajı derler; ChromaDB vektör veritabanı derleme sırasında oluşturulur (offline). İlk build birkaç dakika sürer.
+4. **Create / Apply** — Render imajı derler; anlamsal embedding modeli (`multilingual-e5-small`) derleme sırasında indirilip imaja gömülür ve ChromaDB bu modelle oluşturulur. Çalışma anı offline'dır. İlk build birkaç dakika sürer. ⚠ Free plan 512 MB RAM'dir; e5 modeli OOM verirse hash fallback'e düşülür (düşük kaliteli retrieval).
 5. Deploy bitince Render bir URL verir: `https://doh-backend-xxxx.onrender.com`. Bunu kopyala.
 6. Test: tarayıcıda `https://doh-backend-xxxx.onrender.com/health` aç → `{"status":"ok"}` görmelisin (Swagger için `/docs`).
 
@@ -605,8 +629,8 @@ Artık `https://<proje>.vercel.app` üzerinden uygulama uçtan uca çalışır.
 
 - **Uyku:** Render Free servis ~15 dk istek almazsa uykuya geçer. Sonraki ilk istek servisi uyandırır ve **30–60 sn** sürebilir.
 - **Isındırma:** Demo öncesi `https://doh-backend-xxxx.onrender.com/health` adresini açarak backend'i önceden uyandır.
-- **ChromaDB:** Vektör veritabanı imaja gömülüdür; her cold start'ta hazırdır. Ancak çalışma anında diske yazılan veriler (ör. UI'dan kaydedilen API anahtarı) **kalıcı değildir** — yeniden dağıtımda sıfırlanır. Bu yüzden demo için anahtarı UI yerine Render `GEMINI_API_KEY` env değişkeninden vermek daha sağlamdır.
-- **Bellek:** Free plan 512 MB RAM'dir; yoğun eşzamanlı kullanım için değil, demo amaçlıdır.
+- **ChromaDB + embedding modeli:** Vektör veritabanı ve `multilingual-e5-small` modeli imaja gömülüdür; her cold start'ta hazırdır. Ancak çalışma anında diske yazılan veriler (ör. UI'dan kaydedilen API anahtarı) **kalıcı değildir** — yeniden dağıtımda sıfırlanır. Bu yüzden demo için anahtarı UI yerine Render `GEMINI_API_KEY` env değişkeninden vermek daha sağlamdır.
+- **Bellek:** Free plan 512 MB RAM'dir; e5 modeli (~400 MB) bu sınırı zorlar ve OOM verirse Katman B hash fallback'e düşer (düşük kaliteli retrieval; `/status` `B.detail`'de görünür). Anlamsal retrieval gerekiyorsa ≥2 GB'lık DigitalOcean Droplet kullanın. Free plan yoğun eşzamanlı kullanım için değil, demo amaçlıdır.
 
 ---
 
@@ -677,7 +701,7 @@ Tüm katmanların anlık durumunu döndürür. Gereksiz LLM çağrısı yapmadan
   "version": "0.6.0",
   "layers": {
     "A": {"active": true, "label": "Deterministik Kural Motoru", "detail": "20 kural — her zaman aktif"},
-    "B": {"active": true, "label": "RAG Kontrol", "detail": "ChromaDB hazır"},
+    "B": {"active": true, "label": "RAG Kontrol", "detail": "ChromaDB hazır · embedding: st::intfloat/multilingual-e5-small"},
     "C": {
       "active": true,
       "quota_state": "ok",
@@ -930,6 +954,7 @@ dean-office-helper/
 | `GROQ_API_KEY` | — | Katman C (Groq / Llama 3.3 70B, yedek) için. Opsiyonel |
 | `LAYER_C_PROVIDER` | `gemini` | `"gemini"` veya `"groq"` |
 | `LAYER_C_MODEL` | `gemini-2.5-flash` | Model ID override (groq → `llama-3.3-70b-versatile`) |
+| `EMBEDDING_MODEL` | `intfloat/multilingual-e5-small` | Katman B anlamsal embedding modeli. Yüklenemezse hash fallback'e düşülür. ~400 MB RAM |
 | `CORS_ORIGINS` | — | İzinli frontend origin'leri (virgülle ayrılmış) veya `*` (demo) |
 | `PORT` | `8000` | Backend portu. Render/Cloud platformları otomatik enjekte eder |
 | `NEXT_PUBLIC_API_URL` | `http://localhost:8000` | Frontend'in backend URL'i (build-time'da inline) |

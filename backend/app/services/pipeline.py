@@ -25,13 +25,32 @@ _GUIDELINES_DIR     = Path(__file__).resolve().parent.parent.parent / "data" / "
 
 
 def _ensure_chromadb(chroma_dir: Path) -> None:
-    """ChromaDB dizini yoksa veya boşsa otomatik olarak ingest çalıştırır."""
-    if chroma_dir.exists() and any(chroma_dir.iterdir()):
+    """ChromaDB dizini yoksa/boşsa VEYA embedding modeli değiştiyse otomatik ingest eder."""
+    needs_ingest = False
+    reason = ""
+
+    if not (chroma_dir.exists() and any(chroma_dir.iterdir())):
+        needs_ingest, reason = True, "ChromaDB boş"
+    else:
+        # Embedding modeli koleksiyonla uyuşuyor mu? Uyuşmuyorsa vektör uzayı
+        # geçersizdir (ör. hash → multilingual-e5 geçişi) → yeniden ingest.
+        try:
+            from app.rag.ingest import read_collection_embedding_model
+            from app.rag.embeddings import get_embedding_provider
+            stored = read_collection_embedding_model(chroma_dir)
+            current = get_embedding_provider().name()
+            if stored != current:
+                needs_ingest = True
+                reason = f"embedding modeli farklı (koleksiyon='{stored}', aktif='{current}')"
+        except Exception as exc:
+            logger.debug("Embedding model uyum kontrolü başarısız: %s", exc)
+
+    if not needs_ingest:
         return
     if not _GUIDELINES_DIR.exists():
         logger.warning("Kılavuz dizini bulunamadı: %s — Katman B devre dışı", _GUIDELINES_DIR)
         return
-    logger.info("ChromaDB boş — otomatik ingest başlatılıyor (%s)...", chroma_dir)
+    logger.info("ChromaDB ingest gerekli (%s) — başlatılıyor (%s)...", reason, chroma_dir)
     try:
         from app.rag.ingest import run_ingest
         run_ingest(data_dir=_GUIDELINES_DIR.parent, persist_dir=chroma_dir)

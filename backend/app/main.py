@@ -101,6 +101,17 @@ def _probe_layer_c_quota() -> str:
     return "ok"
 
 
+def _layer_b_detail(lb) -> str:
+    """Katman B durumu — aktif embedding modeli ve fallback uyarısını raporlar."""
+    if lb is None:
+        return "ChromaDB bulunamadı"
+    retriever = getattr(lb, "retriever", None)
+    if retriever is None:
+        return "ChromaDB hazır"
+    # embedding_label() fallback durumunda "fallback (hash) — düşük kalite" döndürür.
+    return f"ChromaDB hazır · embedding: {retriever.embedding_label()}"
+
+
 @app.get("/status")
 def get_status():
     """
@@ -132,7 +143,7 @@ def get_status():
             "B": {
                 "active": lb is not None,
                 "label": "RAG Kontrol",
-                "detail": "ChromaDB hazır" if lb else "ChromaDB bulunamadı",
+                "detail": _layer_b_detail(lb),
             },
             "C": {
                 "active": c_active,

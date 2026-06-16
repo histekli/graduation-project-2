@@ -13,13 +13,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Anlamsal embedding modelini DERLEME aşamasında indir ve imaja göm.
+# Böylece çalışma anında (offline cold-start) model HF'den indirilmek zorunda
+# kalmaz. Model HF cache'ine (~/.cache/huggingface) yazılır ve imajda kalır.
+ENV EMBEDDING_MODEL=intfloat/multilingual-e5-small
+RUN python -c "from sentence_transformers import SentenceTransformer; \
+    SentenceTransformer('${EMBEDDING_MODEL}')"
+
 # Uygulama kodu ve kaynak veriler
 COPY app/ app/
 COPY data/ data/
 
 # ChromaDB vektör veritabanını imaj derlenirken önceden oluştur.
-# SimpleHashEmbedding offline çalışır (API anahtarı gerektirmez); böylece
-# Render Free runtime'da bellek yoğun ingest çalışmaz ve cold start hızlanır.
+# Embedding modeli yukarıda imaja gömüldüğü için bu adım offline çalışır ve
+# runtime cold start hızlanır. Koleksiyon metadata'sına model adı yazılır;
+# model değişirse pipeline başlangıçta otomatik yeniden ingest eder.
 RUN python -m app.rag.ingest
 
 # Entrypoint scripti

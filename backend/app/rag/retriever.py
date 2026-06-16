@@ -24,11 +24,11 @@ class GuidelineRetriever:
     """Kılavuz/yönerge dökümanlarından ilgili chunk'ları getirir."""
 
     def __init__(self, persist_dir: str | Path | None = None):
-        from app.rag.ingest import SimpleHashEmbedding
+        from app.rag.embeddings import get_embedding_provider
 
         p_dir = str(persist_dir or CHROMA_DIR)
         self.client = chromadb.PersistentClient(path=p_dir)
-        self.embedding_fn = SimpleHashEmbedding(dim=384)
+        self.embedding_fn = get_embedding_provider()
         try:
             self.collection = self.client.get_collection(
                 COLLECTION_NAME,
@@ -40,6 +40,18 @@ class GuidelineRetriever:
     @property
     def is_ready(self) -> bool:
         return self.collection is not None and self.collection.count() > 0
+
+    @property
+    def is_fallback(self) -> bool:
+        """Aktif embedding hash fallback mı (anlamsal model yüklenememiş mi)?"""
+        return bool(getattr(self.embedding_fn, "is_fallback", False))
+
+    def embedding_label(self) -> str:
+        """Aktif embedding modelinin insan-okunur etiketi (/status için)."""
+        name = self.embedding_fn.name()
+        if self.is_fallback:
+            return f"fallback (hash) — düşük kalite"
+        return name
 
     def search(
         self,
@@ -73,8 +85,11 @@ class GuidelineRetriever:
         elif source_filter:
             where_filter = {"source_type": source_filter}
 
+        # Sorguyu manuel vektörle (e5 için "query:" prefix uygulanır); ChromaDB'nin
+        # query_texts yolu doküman prefix'ini ("passage:") uygulayacağı için kullanılmaz.
+        query_vec = self.embedding_fn.embed_query(query)
         results = self.collection.query(
-            query_texts=[query],
+            query_embeddings=[query_vec],
             n_results=n,
             where=where_filter,
         )

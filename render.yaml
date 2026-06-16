@@ -21,12 +21,17 @@ services:
         value: gemini
       - key: LAYER_C_MODEL
         value: gemini-2.5-flash
+      - key: EMBEDDING_MODEL  # Katman B anlamsal embedding (RAG)
+        value: intfloat/multilingual-e5-small
+        # UYARI: e5-small + torch ~400 MB RAM ister; Render Free 512 MB'tır ve OOM
+        # olabilir. Bu durumda model yüklenemez ve hash fallback'e düşülür (düşük
+        # kalite). Anlamsal retrieval için 2 GB'lık DigitalOcean Droplet önerilir.
       - key: CORS_ORIGINS     # Vercel URL'si belli olunca güncelle (ör. https://xxx.vercel.app)
         sync: false           # Demo için geçici olarak "*" de girilebilir
       # - key: GROQ_API_KEY   # Opsiyonel yedek sağlayıcı (Llama 3.3 70B) — gerekirse aç
       #   sync: false
 
-    # ChromaDB vektör veritabanı imaj derlenirken oluşturulur (offline hash embedding),
+    # Embedding modeli ve ChromaDB vektör veritabanı imaj derlenirken hazırlanır;
     # bu yüzden demo için kalıcı disk GEREKMEZ. Kalıcı veri istenirse (ücretli plan):
     # disk:
     #   name: chroma-data
