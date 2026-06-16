@@ -26,9 +26,10 @@ logger = logging.getLogger(__name__)
 # Config dosyası — .env dışında, git'e gitmez, UI'dan yazılabilir
 _CONFIG_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "api_config.json"
 
+# Katman C YALNIZCA LLM semantik kategorileri üretir. Deterministik SEM-002
+# (ek-metin) ve SEM-006 (tekrar) Katman A'ya taşındı; burada yer almazlar.
 _RULE_CODE_MAP: dict[str, str] = {
     "konu_metin":       "SEM-001",
-    "ek_metin":         "SEM-002",
     "mantiksal":        "SEM-003",
     "anlatim":          "SEM-004",
     "belge_yeterlilik": "SEM-005",
@@ -36,7 +37,6 @@ _RULE_CODE_MAP: dict[str, str] = {
 
 _CATEGORY_REFERENCES: dict[str, str] = {
     "konu_metin":       "YÖ-0030 R5 Madde 6 — Konu Satırı",
-    "ek_metin":         "YÖ-0030 R5 — Ekler Bölümü",
     "mantiksal":        "Resmi Yazışma İlkeleri — Mantıksal Tutarlılık",
     "anlatim":          "TDK Yazım Kılavuzu; Resmi Yazışma Dili",
     "belge_yeterlilik": "YÖ-0030 R5 — Belge Yeterliliği",
@@ -140,13 +140,10 @@ class LayerC:
 
         findings: list[Finding] = []
 
-        # 1. Deterministik EK-Metin çapraz kontrolü — metin kısa olsa da çalışır
-        findings.extend(self._check_ek_references(doc, metin_text))
-
-        # 2. Deterministik tekrar eden ifade kontrolü
-        findings.extend(self._check_repeated_content(doc, metin_text))
-
-        # 3. LLM tabanlı analiz — çok kısa metinlerde anlamsız, atla
+        # Katman C YALNIZCA LLM tabanlı semantik bulgular üretir. Deterministik
+        # içerik kuralları (SEM-002 ek-metin çapraz kontrolü, SEM-006 tekrar eden
+        # ifade) Katman A'ya (deterministik motor) taşınmıştır. Böylece "Katman C =
+        # LLM" anlatısı mutlaktır ve her C bulgusunun layer alanı doğrudur.
         if len(metin_text.split()) >= 15:
             try:
                 findings.extend(self._run_llm_analysis(doc, metin_text, rag_context or []))
@@ -158,162 +155,6 @@ class LayerC:
                 logger.error("Katman C LLM analizi başarısız: %s", exc)
 
         return findings
-
-    # ── Deterministik EK-Metin kontrolü ────────────────────────────────────
-
-    def _check_ek_references(
-        self, doc: ParsedDocument, metin_text: str
-    ) -> list[Finding]:
-        """
-        Metin içindeki ek atıfları ile EK listesini çapraz kontrol eder.
-        LLM maliyeti olmadan yüksek doğrulukla yakalanabilecek durum.
-        """
-        findings: list[Finding] = []
-
-        ek_refs_in_text = set(
-            re.findall(r"\bEK[-\s]?\d+\b", metin_text, re.IGNORECASE)
-        )
-        has_genel_ek_ref = bool(
-            re.search(r"\bekte\b|\bekli\b|\bek'te\b", metin_text, re.IGNORECASE)
-        )
-
-        ek_nums_in_list: set[str] = set()
-        for ek_item in doc.ek_list:
-            # Yalnızca EK etiket numarasını al (ör. "EK-1: ... (3 sayfa)" → 1, sayfa sayısı değil)
-            ek_nums_in_list.update(
-                re.findall(r"\bEK[-\s]?(\d+)", ek_item, re.IGNORECASE)
-            )
-
-        # Metin içinde ek atıfı var ama EK bölümü oluşturulmamış
-        if (ek_refs_in_text or has_genel_ek_ref) and not doc.ek_list:
-            findings.append(Finding(
-                id=self._next_id(),
-                layer=Layer.C,
-                severity=Severity.WARNING,
-                rule_code="SEM-002",
-                title="Ek atıfı var fakat EK bölümü boş",
-                description=(
-                    "Metin içinde ek belgeye atıfta bulunulmuş ancak "
-                    "belgede EK bölümü oluşturulmamış ya da boş bırakılmış."
-                ),
-                found=", ".join(sorted(ek_refs_in_text)) or "ekte/ekli ifadesi",
-                reference="YÖ-0030 R5, Ekler bölümü",
-                suggestion=(
-                    "EK bölümü ekleyip ekleri numaralandırın. "
-                    "Örn: 'EK-1: Dilekçe (1 sayfa)'"
-                ),
-                confidence=0.92,
-            ))
-
-        # EK listesi var ama metin içinde hiç atıf yapılmamış
-        elif doc.ek_list and not ek_refs_in_text and not has_genel_ek_ref:
-            findings.append(Finding(
-                id=self._next_id(),
-                layer=Layer.C,
-                severity=Severity.INFO,
-                rule_code="SEM-002",
-                title="EK listesi var fakat metin içinde atıf yok",
-                description=(
-                    f"{len(doc.ek_list)} adet ek listelenmiş ancak "
-                    "metin içinde bu eklere atıfta bulunulmamış."
-                ),
-                reference="Resmi yazışma ilkeleri",
-                suggestion=(
-                    "Metin içinde eklerden söz edin. "
-                    "Örn: '...dilekçe örneği ekte sunulmuştur. (EK-1)'"
-                ),
-                confidence=0.78,
-            ))
-
-        # Metinde atıf yapılan ek numarası EK listesinde yer almıyor
-        if doc.ek_list and ek_refs_in_text:
-            referenced_nums: set[str] = set()
-            for ref in ek_refs_in_text:
-                referenced_nums.update(re.findall(r"\d+", ref))
-            unlisted = referenced_nums - ek_nums_in_list
-            if unlisted:
-                missing = ", ".join(f"EK-{n}" for n in sorted(unlisted, key=int))
-                findings.append(Finding(
-                    id=self._next_id(),
-                    layer=Layer.C,
-                    severity=Severity.WARNING,
-                    rule_code="SEM-002",
-                    title="Metinde atıf yapılan ek listede yok",
-                    description=(
-                        f"Metinde {missing} ekine atıfta bulunulmuş ancak bu ek, "
-                        "belgenin EK bölümünde listelenmemiş."
-                    ),
-                    found=missing,
-                    reference="YÖ-0030 R5, Ekler bölümü",
-                    suggestion=(
-                        f"{missing} ekini EK bölümüne ekleyin ya da metindeki "
-                        "atfı düzeltin."
-                    ),
-                    confidence=0.9,
-                ))
-
-        return findings
-
-    # ── Deterministik tekrar kontrolü ───────────────────────────────────────
-
-    @staticmethod
-    def _word_overlap(a: str, b: str) -> float:
-        """İki cümle arasındaki sözcük örtüşme oranını hesaplar (0.0–1.0)."""
-        wa = set(a.split())
-        wb = set(b.split())
-        if not wa or not wb:
-            return 0.0
-        return len(wa & wb) / max(len(wa), len(wb))
-
-    def _check_repeated_content(
-        self, doc: ParsedDocument, metin_text: str
-    ) -> list[Finding]:
-        """
-        Metin gövdesinde tekrar eden cümleleri deterministik olarak tespit eder.
-        Hem tam tekrarları hem de yüksek sözcük örtüşmeli (≥85%) cümleleri yakalar.
-        """
-        metin_paras = [
-            pp.text for pp in doc.paragraphs
-            if pp.section == DocumentSection.METIN
-        ]
-        if not metin_paras:
-            return []
-
-        sentences: list[str] = []
-        for text in metin_paras:
-            for sent in re.split(r"(?<=[.!?])\s+", text):
-                cleaned = re.sub(r"\s+", " ", sent.strip().lower())
-                if len(cleaned) >= 30:
-                    sentences.append(cleaned)
-
-        if len(sentences) < 2:
-            return []
-
-        repeated_pairs: list[tuple[str, str]] = []
-        for i in range(len(sentences)):
-            for j in range(i + 1, len(sentences)):
-                if self._word_overlap(sentences[i], sentences[j]) >= 0.85:
-                    repeated_pairs.append((sentences[i], sentences[j]))
-
-        if not repeated_pairs:
-            return []
-
-        first_a, first_b = repeated_pairs[0]
-        return [Finding(
-            id=self._next_id(),
-            layer=Layer.C,
-            severity=Severity.INFO,
-            rule_code="SEM-006",
-            title=f"Tekrar eden ifade ({len(repeated_pairs)} çift)",
-            description=(
-                f"Metin gövdesinde {len(repeated_pairs)} çift birbirine çok benzer "
-                f"cümle veya ifade tespit edildi."
-            ),
-            found=f'"{first_a[:60]}..." ↔ "{first_b[:60]}..."',
-            reference="Resmi yazışma ilkeleri — özlük ve sadelik",
-            suggestion="Tekrar eden ifadeleri kaldırın veya farklı şekilde ifade edin.",
-            confidence=0.92,
-        )]
 
     # ── LLM analizi ─────────────────────────────────────────────────────────
 

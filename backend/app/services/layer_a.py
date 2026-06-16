@@ -44,8 +44,13 @@ class LayerA:
         findings.extend(self._check_kapanis(doc))
         findings.extend(self._check_onay_words(doc))
 
-        # ── Tutarlılık kuralları (deterministik) ──
-        findings.extend(self._check_ek_count(doc))
+        # ── Deterministik içerik kuralları ──
+        # SEM-002 (ek sayısı) ve aşağıdaki SEM-002 (ek-metin çapraz) / SEM-006
+        # (tekrar) kuralları deterministiktir; bu yüzden LLM olan Katman C yerine
+        # deterministik Katman A motorunda çalışırlar (bkz. README mimari notu).
+        findings.extend(self._check_ek_count(doc))          # SEM-002 (ek sayısı tutarsızlığı)
+        findings.extend(self._check_ek_references(doc))     # SEM-002 (ek-metin çapraz kontrolü)
+        findings.extend(self._check_repeated_content(doc))  # SEM-006 (tekrar eden ifade)
 
         # ── Dil/yazım kuralları ──
         findings.extend(self._check_language(doc))
@@ -459,6 +464,147 @@ class LayerA:
                 ),
             )]
         return []
+
+    def _get_metin_text(self, doc: ParsedDocument) -> str:
+        """Belgenin metin gövdesini düz metin olarak döndürür."""
+        parts = [
+            pp.text for pp in doc.paragraphs
+            if pp.index in doc.metin_paragraphs or pp.section == DocumentSection.METIN
+        ]
+        return " ".join(parts)
+
+    def _check_ek_references(self, doc: ParsedDocument) -> list[Finding]:
+        """SEM-002: Metin içindeki ek atıfları ile EK listesini çapraz kontrol eder.
+
+        Deterministik içerik kuralı (eski Katman C'den taşındı). LLM maliyeti
+        olmadan yüksek doğrulukla yakalanır.
+        """
+        findings: list[Finding] = []
+        metin_text = self._get_metin_text(doc)
+
+        ek_refs_in_text = set(re.findall(r"\bEK[-\s]?\d+\b", metin_text, re.IGNORECASE))
+        has_genel_ek_ref = bool(
+            re.search(r"\bekte\b|\bekli\b|\bek'te\b", metin_text, re.IGNORECASE)
+        )
+
+        ek_nums_in_list: set[str] = set()
+        for ek_item in doc.ek_list:
+            ek_nums_in_list.update(re.findall(r"\bEK[-\s]?(\d+)", ek_item, re.IGNORECASE))
+
+        # Metin içinde ek atıfı var ama EK bölümü oluşturulmamış
+        if (ek_refs_in_text or has_genel_ek_ref) and not doc.ek_list:
+            findings.append(Finding(
+                id=self._next_id(),
+                layer=Layer.A,
+                severity=Severity.WARNING,
+                rule_code="SEM-002",
+                title="Ek atıfı var fakat EK bölümü boş",
+                description=(
+                    "Metin içinde ek belgeye atıfta bulunulmuş ancak "
+                    "belgede EK bölümü oluşturulmamış ya da boş bırakılmış."
+                ),
+                found=", ".join(sorted(ek_refs_in_text)) or "ekte/ekli ifadesi",
+                reference="YÖ-0030 R5, Ekler bölümü",
+                suggestion="EK bölümü ekleyip ekleri numaralandırın. Örn: 'EK-1: Dilekçe (1 sayfa)'",
+                confidence=0.92,
+            ))
+        # EK listesi var ama metin içinde hiç atıf yapılmamış
+        elif doc.ek_list and not ek_refs_in_text and not has_genel_ek_ref:
+            findings.append(Finding(
+                id=self._next_id(),
+                layer=Layer.A,
+                severity=Severity.INFO,
+                rule_code="SEM-002",
+                title="EK listesi var fakat metin içinde atıf yok",
+                description=(
+                    f"{len(doc.ek_list)} adet ek listelenmiş ancak "
+                    "metin içinde bu eklere atıfta bulunulmamış."
+                ),
+                reference="Resmi yazışma ilkeleri",
+                suggestion="Metin içinde eklerden söz edin. Örn: '...örneği ekte sunulmuştur. (EK-1)'",
+                confidence=0.78,
+            ))
+
+        # Metinde atıf yapılan ek numarası EK listesinde yer almıyor
+        if doc.ek_list and ek_refs_in_text:
+            referenced_nums: set[str] = set()
+            for ref in ek_refs_in_text:
+                referenced_nums.update(re.findall(r"\d+", ref))
+            unlisted = referenced_nums - ek_nums_in_list
+            if unlisted:
+                missing = ", ".join(f"EK-{n}" for n in sorted(unlisted, key=int))
+                findings.append(Finding(
+                    id=self._next_id(),
+                    layer=Layer.A,
+                    severity=Severity.WARNING,
+                    rule_code="SEM-002",
+                    title="Metinde atıf yapılan ek listede yok",
+                    description=(
+                        f"Metinde {missing} ekine atıfta bulunulmuş ancak bu ek, "
+                        "belgenin EK bölümünde listelenmemiş."
+                    ),
+                    found=missing,
+                    reference="YÖ-0030 R5, Ekler bölümü",
+                    suggestion=f"{missing} ekini EK bölümüne ekleyin ya da metindeki atfı düzeltin.",
+                    confidence=0.9,
+                ))
+
+        return findings
+
+    @staticmethod
+    def _word_overlap(a: str, b: str) -> float:
+        """İki cümle arasındaki sözcük örtüşme oranını hesaplar (0.0–1.0)."""
+        wa, wb = set(a.split()), set(b.split())
+        if not wa or not wb:
+            return 0.0
+        return len(wa & wb) / max(len(wa), len(wb))
+
+    def _check_repeated_content(self, doc: ParsedDocument) -> list[Finding]:
+        """SEM-006: Metin gövdesinde tekrar eden (≥%85 sözcük örtüşmeli) cümleler.
+
+        Deterministik içerik kuralı (eski Katman C'den taşındı).
+        """
+        metin_paras = [
+            pp.text for pp in doc.paragraphs if pp.section == DocumentSection.METIN
+        ]
+        if not metin_paras:
+            return []
+
+        sentences: list[str] = []
+        for text in metin_paras:
+            for sent in re.split(r"(?<=[.!?])\s+", text):
+                cleaned = re.sub(r"\s+", " ", tr_lower(sent.strip()))
+                if len(cleaned) >= 30:
+                    sentences.append(cleaned)
+
+        if len(sentences) < 2:
+            return []
+
+        repeated_pairs: list[tuple[str, str]] = []
+        for i in range(len(sentences)):
+            for j in range(i + 1, len(sentences)):
+                if self._word_overlap(sentences[i], sentences[j]) >= 0.85:
+                    repeated_pairs.append((sentences[i], sentences[j]))
+
+        if not repeated_pairs:
+            return []
+
+        first_a, first_b = repeated_pairs[0]
+        return [Finding(
+            id=self._next_id(),
+            layer=Layer.A,
+            severity=Severity.INFO,
+            rule_code="SEM-006",
+            title=f"Tekrar eden ifade ({len(repeated_pairs)} çift)",
+            description=(
+                f"Metin gövdesinde {len(repeated_pairs)} çift birbirine çok benzer "
+                f"cümle veya ifade tespit edildi."
+            ),
+            found=f'"{first_a[:60]}..." ↔ "{first_b[:60]}..."',
+            reference="Resmi yazışma ilkeleri — özlük ve sadelik",
+            suggestion="Tekrar eden ifadeleri kaldırın veya farklı şekilde ifade edin.",
+            confidence=0.92,
+        )]
 
     # ═══════════════════════════════════════════════════════════════
     # DİL / YAZIM KURALLARI (deterministik regex tabanlı)

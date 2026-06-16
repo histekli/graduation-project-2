@@ -434,6 +434,19 @@ def make_a_ek_count_too_many(path: Path) -> None:
     _save(doc, path.name)
 
 
+def make_a_sem006_repeated(path: Path) -> None:
+    """SEM-006: Metin gövdesinde neredeyse aynı iki cümle (tekrar eden ifade)."""
+    doc = Document()
+    _margins(doc)
+    _std_header(doc, konu="Konu: Toplantı Duyurusu")
+    _body(doc, "Söz konusu değerlendirme toplantısı on beş Mayıs iki bin yirmi beş "
+               "tarihinde yapılacaktır.")
+    _body(doc, "Söz konusu değerlendirme toplantısı on beş Mayıs iki bin yirmi beş "
+               "tarihinde yapılacaktır.")
+    _std_closing(doc)
+    _save(doc, path.name)
+
+
 def make_a_ek_no_reference_in_text(path: Path) -> None:
     """SEM-002 (Layer C): Ek listesi var ama metin içinde atıf yok."""
     doc = Document()
@@ -1060,7 +1073,8 @@ COMPREHENSIVE_SPECS: list[tuple[str, str, callable]] = [
     # ── Katman A: Tutarlılık ──────────────────────────────────────────────
     ("a_sem002_ek_too_few.docx",        "SEM-002: Metinde 4 adet, ekte 2 var",           make_a_ek_count_too_few),
     ("a_sem002_ek_too_many.docx",       "SEM-002: Metinde iki adet, ekte 4 var",         make_a_ek_count_too_many),
-    ("a_sem002_ek_no_ref.docx",         "SEM-002: Ek var ama metinde atıf yok (Kat C)", make_a_ek_no_reference_in_text),
+    ("a_sem002_ek_no_ref.docx",         "SEM-002: Ek var ama metinde atıf yok (det. içerik)", make_a_ek_no_reference_in_text),
+    ("a_sem006_repeated.docx",          "SEM-006: Tekrar eden ifade (det. içerik)",      make_a_sem006_repeated),
     # ── Katman B: Hiyerarşi ──────────────────────────────────────────────
     ("b_hir001_bolum_rektor.docx",      "HIR-001: Bölüm→Rektör 'Rica ederim'",           make_b_hir001_bolum_rektor),
     ("b_hir001_muhendislik_rektor.docx","HIR-001: Fakülte→Rektör 'Rica ederim'",         make_b_hir001_muhendislik_rektor),

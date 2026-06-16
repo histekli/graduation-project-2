@@ -271,6 +271,16 @@ class TestLayerAEkCount:
         codes = _layer_a_codes("mix_ilgili_ekli_complete.docx")
         _assert_not_has(codes, "SEM-002", "mix_ilgili_ekli_complete.docx")
 
+    def test_ek_no_ref_triggers_sem002_layer_a(self):
+        """EKSIK 4: EK var ama metinde atıf yok → SEM-002 artık Layer A'dan gelir."""
+        codes = _layer_a_codes("a_sem002_ek_no_ref.docx")
+        _assert_has(codes, "SEM-002", "a_sem002_ek_no_ref.docx")
+
+    def test_repeated_content_triggers_sem006_layer_a(self):
+        """EKSIK 4: Tekrar eden ifade → SEM-006 artık Layer A (deterministik)."""
+        codes = _layer_a_codes("a_sem006_repeated.docx")
+        _assert_has(codes, "SEM-006", "a_sem006_repeated.docx")
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # KATMAN B — RAG Destekli Kurallar
@@ -577,13 +587,14 @@ class TestLayerCMock:
             findings = lc.run(_parse("c_sem001_strong_mismatch.docx"))
         assert findings == []
 
-    def test_sem002_ek_no_ref_triggers_layer_c(self):
-        """EK var ama metinde atıf yok → Layer C SEM-002 üretmeli."""
+    def test_layer_c_no_deterministic_sem002(self):
+        """EKSIK 4: SEM-002 Katman A'ya taşındı → Katman C üretmemeli (LLM boş)."""
         lc = LayerC(provider="gemini", api_key="mock-key-test")
         with patch.object(lc, "_call_llm", return_value=_MOCK_EMPTY):
             findings = lc.run(_parse("a_sem002_ek_no_ref.docx"))
         codes = {f.rule_code for f in findings}
-        _assert_has(codes, "SEM-002", "a_sem002_ek_no_ref.docx")
+        _assert_not_has(codes, "SEM-002", "a_sem002_ek_no_ref.docx",
+                        note="deterministik kural Katman A'ya taşındı")
 
 
 class TestLayerCRealAPI:

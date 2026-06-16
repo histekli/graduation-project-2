@@ -59,9 +59,9 @@ Kullanıcı .docx yükler
                         ▼
 ┌─────────────────────────────────────────────────────────────┐
 │  KATMAN A — Deterministik Kural Motoru (layer_a.py)         │
-│  · python-docx + regex                                       │
-│  · Sıfır hallüsinasyon, yüksek kesinlik                     │
-│  · 20 kural: FMT, FLD, CLS, LNG-001..008                   │
+│  · python-docx + regex · Sıfır hallüsinasyon                │
+│  · Biçim/alan/dil: FMT, FLD, CLS, LNG-001..008 (20 kural)  │
+│  · Deterministik İÇERİK: SEM-002 (ek-metin), SEM-006 (tekrar)│
 │  · Her analiz ~0.1 ms                                        │
 └───────────────────────┬─────────────────────────────────────┘
                         │
@@ -80,8 +80,9 @@ Kullanıcı .docx yükler
 ┌─────────────────────────────────────────────────────────────┐
 │  KATMAN C — Semantik/Mantıksal Analiz (layer_c.py)          │
 │  · Google Gemini 2.5 Flash (birincil)                        │
-│  · Anthropic Claude (opsiyonel)                              │
-│  · SEM-001..006: Konu uyumu, mantıksal tutarlılık, anlatım  │
+│  · Groq / Llama 3.3 70B (yedek)                              │
+│  · YALNIZCA LLM bulguları (deterministik kural YOK)          │
+│  · SEM-001,003,004,005: konu, mantık, anlatım, yeterlilik   │
 │  · JSON structured output, confidence scoring (≥ 0.50)      │
 │  · found_text (kanıt alıntısı) + suggested_text (yeniden    │
 │    yazım önerisi) alanları                                   │
@@ -111,7 +112,7 @@ Kullanıcı .docx yükler
 
 ## Kural Kodları
 
-### Katman A — Deterministik Kurallar (20 kural)
+### Katman A — Deterministik Kurallar (20 biçim/alan/dil + 2 deterministik içerik)
 
 | Kod | Kural | Kaynak |
 |-----|-------|--------|
@@ -135,6 +136,10 @@ Kullanıcı .docx yükler
 | **LNG-006** | İki nokta öncesi gereksiz boşluk (hata: "konu :") | TDK |
 | **LNG-007** | Parantez içi gereksiz boşluk (hata: "( metin )") | TDK |
 | **LNG-008** | Çok uzun cümle (>35 kelime) | Resmi yazışma okunabilirlik ilkeleri |
+| **SEM-002** | Ek-Metin tutarlılığı — ek sayısı + ek atıfı çapraz kontrolü (**deterministik içerik**) | Yönetmelik Md. 20-d; YÖ-0030 R5 Ekler |
+| **SEM-006** | Tekrar eden ifade — ≥%85 sözcük örtüşmeli cümle çiftleri (**deterministik içerik**) | Resmi yazışma ilkeleri — özlük ve sadelik |
+
+> **Not (mimari):** SEM-002 ve SEM-006 "SEM" (semantik) ailesinde kodlanmış olsa da **deterministiktir** ve bu yüzden LLM olan Katman C'de değil, deterministik Katman A motorunda çalışır. Kod kodları korunmuştur; `layer` alanları `A`'dır. Deterministik oldukları için `full` **ve** `format_only` modlarında çalışırlar (LLM maliyeti yok).
 
 ### Katman B — RAG Destekli Kontrol
 
@@ -151,13 +156,11 @@ Kullanıcı .docx yükler
 | Kod | Kural | Açıklama |
 |-----|-------|----------|
 | **SEM-001** | Konu-Metin İçeriği Uyumsuzluğu | Konu satırı metni doğru özetlemiyor mu? |
-| **SEM-002** | Ek-Metin Çapraz Kontrolü | Metinde ek atıfı var ama EK bölümü boş, ya da tersi |
 | **SEM-003** | Mantıksal Tutarsızlık | İç çelişki, belirsiz atıf, muhatap-içerik uyumsuzluğu |
 | **SEM-004** | Anlatım Bozuklukları | Özne-yüklem, sarkık cümle, aşırı edilgen yapı |
 | **SEM-005** | Belge Yeterliliği | Amaç yeterince açıklanmış mı? Gerekli bilgiler tam mı? |
-| **SEM-006** | Tekrar Eden İfade | Metinde ≥%85 sözcük örtüşmeli cümle çiftleri (deterministik) |
 
-> **Not:** SEM-002 ve SEM-006 deterministik olarak Katman C içinde çalışır (LLM maliyeti olmadan).
+> **Not:** Katman C **yalnızca** LLM çağrısıyla bulgu üretir; içinde deterministik kural yoktur. Eskiden burada bulunan deterministik SEM-002 (ek-metin) ve SEM-006 (tekrar) kuralları, mimari tutarlılık için Katman A'ya taşınmıştır (yukarıdaki Katman A tablosu).
 
 ### Otomatik Düzeltme (fixer.py)
 

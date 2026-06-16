@@ -276,8 +276,11 @@ class TestLayerC:
         has_sem = any(c.startswith("SEM-") for c in codes)
         assert has_sem, f"En az bir SEM-xxx bekleniyor; bulunan: {codes}"
 
-        # SEM-002: ek sayısı uyumsuzluğu (3 adet belirtilmiş, 2 var)
-        assert "SEM-002" in codes, f"SEM-002 (ek sayısı) eksik; bulunan: {codes}"
+        # EKSIK 4: SEM-002 deterministik olduğu için Katman A'ya taşındı;
+        # Katman C (LLM) bunu artık üretmemeli.
+        assert "SEM-002" not in codes, (
+            f"SEM-002 Katman C'den gelmemeli (Katman A'ya taşındı); bulunan: {codes}"
+        )
 
         # Her bulgunun confidence değeri eşiğin üzerinde olmalı
         for f in findings:
