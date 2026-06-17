@@ -15,16 +15,24 @@ const SEV = {
 
 const LAYER_LABELS = { A: "Kural Motoru", B: "RAG Kontrol", C: "Semantik Analiz" };
 
-// ── GTU Emblem ────────────────────────────────────────────────────────────────
+// ── GTU Logo ──────────────────────────────────────────────────────────────────
 
-function GTUEmblem({ size = 40 }) {
+function GTULogo() {
   return (
-    <svg width={size} height={size} viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <polygon points="30,2 56,16 56,44 30,58 4,44 4,16" fill="var(--accent)" />
-      <polygon points="30,8 50,19 50,41 30,52 10,41 10,19" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="1" />
-      <text x="30" y="38" textAnchor="middle" fontSize="15" fontWeight="900" fill="white"
-        fontFamily="Arial, sans-serif" letterSpacing="-0.5">GTÜ</text>
-    </svg>
+    <div style={{
+      background: "#ffffff",
+      borderRadius: 8,
+      padding: "4px 10px",
+      display: "flex", alignItems: "center",
+      flexShrink: 0,
+      boxShadow: "0 1px 3px rgba(0,0,0,0.10)",
+    }}>
+      <img
+        src="/gtu-logo.jpg"
+        alt="Gebze Technical University"
+        style={{ height: 40, width: "auto", display: "block" }}
+      />
+    </div>
   );
 }
 
@@ -762,10 +770,15 @@ export default function App() {
       }}>
         {/* Logo + Title */}
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-          <GTUEmblem size={40} />
+          <GTULogo />
+          <div style={{
+            width: 1, height: 32,
+            background: "var(--border-default)",
+            flexShrink: 0,
+          }} />
           <div>
-            <div style={{ fontSize: 10, color: "var(--accent)", letterSpacing: "0.10em", fontWeight: 700, textTransform: "uppercase" }}>
-              Gebze Teknik Üniversitesi
+            <div style={{ fontSize: 10, color: "var(--text-muted)", letterSpacing: "0.08em", fontWeight: 600, textTransform: "uppercase" }}>
+              Dekanlık / Uyum
             </div>
             <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-primary)", letterSpacing: "-0.01em", lineHeight: 1.2 }}>
               Yazışma Uyum Denetleyicisi
