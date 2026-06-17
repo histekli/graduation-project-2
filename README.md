@@ -261,10 +261,10 @@ Katman B, yönerge maddelerine dayalı bulgu üretmek için ChromaDB vektör ver
 
 | # | Kaynak | Tür | source_type | Chunk |
 |---|--------|-----|-------------|-------|
-| 1 | GTU YÖ-0030 R5 Yazışma Yönergesi (08.08.2023) | PDF | `gtu_yonerge` | 52 |
+| 1 | GTU YÖ-0030 R5 Yazışma Yönergesi (08.08.2023) | PDF | `gtu_yonerge` | 151 |
 | 2 | Resmi Yazışmalarda Uygulanacak Usul ve Esaslar Yönetmeliği (10.06.2020, R.G. 31151) | PDF + TXT | `resmi_yazisma_yonetmeligi` | 39 |
-| 3 | Cumhurbaşkanlığı Resmi Yazışma Kılavuzu 2025 | PDF | `cb_kilavuzu` | 101 |
-| 4 | TDK Yazım Kılavuzu (web scraping) | JSON | `tdk_official` | 35 |
+| 3 | Cumhurbaşkanlığı Resmi Yazışma Kılavuzu 2025 | PDF | `cb_kilavuzu` | 207 |
+| 4 | TDK Yazım Kılavuzu (web scraping) | JSON | `tdk_official` | 159 |
 | 5 | Dilekçe Hakkının Kullanılmasına Dair Kanun No. 3071 | PDF | `dilekce_kanunu` | 13 |
 | 6 | GTU Organizasyon Hiyerarşisi | Kodlanmış | (hierarchy.py) | — |
 
@@ -424,7 +424,7 @@ TDK Yazım Kılavuzu verileri [tdk.gov.tr](https://tdk.gov.tr/kategori/icerik/ya
 }
 ```
 
-5. `ingest_tdk_json()` fonksiyonu ile 35 chunk'a bölünerek ChromaDB'ye yüklendi
+5. `ingest_tdk_json()` fonksiyonu ile 159 chunk'a bölünerek ChromaDB'ye yüklendi (büyük başlıklar — ör. "Noktalama İşaretleri" — `_chunk_text` ile alt parçalara ayrılır)
 
 ### Kapsam
 
