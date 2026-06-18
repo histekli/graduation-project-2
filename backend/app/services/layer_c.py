@@ -51,7 +51,12 @@ _SEVERITY_MAP: dict[str, Severity] = {
 _CONFIDENCE_THRESHOLD = 0.50  # Altındaki bulgular atlanır
 
 # Üretim/giriş ayarları
-_MAX_OUTPUT_TOKENS = 2048  # çok bulgulu JSON'un kesilmemesi için
+# NOT: Gemini 2.5 Flash'ta "thinking" token'ları da max_output_tokens'tan
+# harcanır. Düşük tutulursa düşünme bütçesi tüm payı yer, gerçek JSON kesilir
+# (finishReason=MAX_TOKENS) ve hiç bulgu dönmez. Bu yüzden cömert tutuyoruz +
+# thinking bütçesini ayrıca sınırlıyoruz.
+_MAX_OUTPUT_TOKENS = 8192
+_THINKING_BUDGET = 1024    # Gemini 2.5: sınırlı düşünme → JSON'a yer kalır
 _TEMPERATURE = 0.2         # düşük → tutarlı, tekrarlanabilir bulgular
 _METIN_SNIPPET_LIMIT = 3000
 
@@ -267,6 +272,7 @@ METİN:
 - Her bulgunun "found_text" alanı, METİN bölümünden BİREBİR (kelimesi kelimesine) kopyalanmış bir parça olmalı. Uydurma/parafraz YASAK — alıntılayamadığın bulguyu hiç yazma.
 - Biçimsel sorunlara (noktalama, büyük harf, boşluk, font) DEĞİNME.
 - Aynı sorunu iki kez yazma. En fazla 6 bulgu.
+- "description" kısa ve öz olsun (≤200 karakter). Uzun açıklama yazma.
 - Gerçek sorun yoksa: {{"findings": []}}
 - confidence: gerçekçi ver. Çok eminsen 0.85–0.95; makul şüphedeysen 0.6–0.8; 0.55 altını EKLEME.
 
@@ -328,17 +334,34 @@ SADECE şu yapıda geçerli JSON döndür (başka metin yok):
             self._client = genai.Client(api_key=self.api_key)
 
         # JSON mode + system instruction + düşük sıcaklık → tutarlı, geçerli JSON.
+        # thinking_budget: Gemini 2.5'te düşünme token'larını sınırlar; aksi halde
+        # tüm max_output_tokens payını yer ve JSON yanıtı kesilir (boş bulgu).
+        cfg_kwargs = dict(
+            system_instruction=_SYSTEM_PROMPT,
+            temperature=_TEMPERATURE,
+            max_output_tokens=_MAX_OUTPUT_TOKENS,
+            response_mime_type="application/json",
+        )
+        try:
+            cfg_kwargs["thinking_config"] = types.ThinkingConfig(thinking_budget=_THINKING_BUDGET)
+        except Exception:  # eski SDK / desteklemeyen model — düşünme sınırı atlanır
+            pass
+
         response = self._client.models.generate_content(
             model=self.model,
             contents=prompt,
-            config=types.GenerateContentConfig(
-                system_instruction=_SYSTEM_PROMPT,
-                temperature=_TEMPERATURE,
-                max_output_tokens=_MAX_OUTPUT_TOKENS,
-                response_mime_type="application/json",
-            ),
+            config=types.GenerateContentConfig(**cfg_kwargs),
         )
-        return response.text
+        text = response.text
+        if not text:
+            # Güvenlik filtresi/MAX_TOKENS gibi durumlarda text boş olabilir;
+            # aday parçalarından metni toparlamayı dene.
+            try:
+                parts = response.candidates[0].content.parts
+                text = "".join(getattr(p, "text", "") or "" for p in parts)
+            except Exception:
+                text = ""
+        return text or ""
 
     # ── LLM yanıtı ayrıştırma ───────────────────────────────────────────────
 
@@ -456,7 +479,61 @@ def _extract_findings(raw: str) -> list | None:
         except json.JSONDecodeError:
             pass
 
+    # Son çare — kesik/bozuk yanıttan tamamlanmış bulgu nesnelerini kurtar.
+    # (Yanıt MAX_TOKENS ile kesilirse en azından tam olanları kullanırız.)
+    salvaged = _salvage_objects(text)
+    if salvaged:
+        logger.info("Katman C: kesik yanıttan %d bulgu kurtarıldı.", len(salvaged))
+        return salvaged
+
     return None
+
+
+def _salvage_objects(text: str) -> list[dict]:
+    """
+    Kesik/bozuk JSON metninden dengeli {...} nesnelerini kurtarır.
+    İç içe nesneleri de yakalar (dış sarmal kapanmamış olsa bile): her '{' için
+    başlangıç konumunu yığına alır, kapanınca o aralığı ayrıştırmayı dener.
+    """
+    objs: list[dict] = []
+    stack: list[int] = []
+    in_str = False
+    escape = False
+    for i, ch in enumerate(text):
+        if escape:
+            escape = False
+            continue
+        if ch == "\\":
+            escape = True
+            continue
+        if ch == '"':
+            in_str = not in_str
+            continue
+        if in_str:
+            continue
+        if ch == "{":
+            stack.append(i)
+        elif ch == "}":
+            if stack:
+                start = stack.pop()
+                chunk = text[start:i + 1]
+                try:
+                    obj = json.loads(chunk)
+                except json.JSONDecodeError:
+                    continue
+                # Sadece bulgu gibi görünen nesneleri al; sarmalı ({"findings":..}) atla
+                if isinstance(obj, dict) and "findings" not in obj and (
+                    "category" in obj or "title" in obj
+                ):
+                    objs.append(obj)
+    # Yinelenenleri (iç içe yakalama nedeniyle) sırayı koruyarak temizle
+    uniq, seen = [], set()
+    for o in objs:
+        key = json.dumps(o, sort_keys=True, ensure_ascii=False)
+        if key not in seen:
+            seen.add(key)
+            uniq.append(o)
+    return uniq
 
 
 def _coerce_confidence(value: Any) -> float:
