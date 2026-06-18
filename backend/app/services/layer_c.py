@@ -14,6 +14,7 @@ import json
 import logging
 import os
 import re
+import time
 from pathlib import Path
 from typing import Any
 
@@ -49,6 +50,14 @@ _SEVERITY_MAP: dict[str, Severity] = {
 }
 
 _CONFIDENCE_THRESHOLD = 0.50  # Altındaki bulgular atlanır
+
+# Geçici (retry edilebilir) sağlayıcı hataları — Gemini/Groq sunucu tarafı
+# "yoğunluk" / 5xx durumları. Bunlar tüm semantik analizi çöp etmemeli;
+# kısa backoff ile birkaç kez denenir.
+_TRANSIENT_MARKERS = ("503", "unavailable", "overloaded", "high demand",
+                      "500", "internal error", "502", "504", "timeout")
+_QUOTA_MARKERS = ("429", "quota", "resource_exhausted", "rate limit", "ratelimit")
+_RETRY_BACKOFF = (1.5, 3.0, 5.0)  # deneme arası bekleme (sn); uzunluğu = max retry
 
 # Üretim/giriş ayarları
 # NOT: Gemini 2.5 Flash'ta "thinking" token'ları da max_output_tokens'tan
@@ -192,7 +201,7 @@ class LayerC:
         rag_context: list[dict] | None = None,
     ) -> list[Finding]:
         prompt = self._build_prompt(doc, metin_text, rag_context or [])
-        raw_response = self._call_llm(prompt)
+        raw_response = self._call_llm_resilient(prompt)
         # Grounding için "saman yığını": modelin alıntı yapabileceği tüm belge metni
         haystack = " ".join(filter(None, [
             doc.konu, doc.muhatap, metin_text, doc.kapanis_phrase,
@@ -296,6 +305,35 @@ SADECE şu yapıda geçerli JSON döndür (başka metin yok):
         if self.provider == "groq":
             return self._call_groq(prompt)
         raise ValueError(f"Bilinmeyen LLM sağlayıcı: '{self.provider}'. 'gemini' veya 'groq' kullanın.")
+
+    def _call_llm_resilient(self, prompt: str) -> str:
+        """
+        _call_llm'i geçici sunucu hatalarına (503/yoğunluk/5xx) karşı korur:
+        kısa backoff ile yeniden dener. Kota/rate hataları (429) anında yukarı
+        fırlatılır — onları pipeline yönetir (kota durumu gösterimi).
+        """
+        last_exc: Exception | None = None
+        for attempt in range(len(_RETRY_BACKOFF)):
+            try:
+                return self._call_llm(prompt)
+            except Exception as exc:
+                msg = str(exc).lower()
+                if any(k in msg for k in _QUOTA_MARKERS):
+                    raise  # kota/rate → pipeline'a bırak
+                is_transient = any(k in msg for k in _TRANSIENT_MARKERS)
+                is_last = attempt == len(_RETRY_BACKOFF) - 1
+                if not is_transient or is_last:
+                    raise
+                wait = _RETRY_BACKOFF[attempt]
+                logger.warning(
+                    "Katman C: geçici sağlayıcı hatası (deneme %d/%d), %.1fs sonra yeniden denenecek: %s",
+                    attempt + 1, len(_RETRY_BACKOFF), wait, str(exc)[:120],
+                )
+                last_exc = exc
+                time.sleep(wait)
+        if last_exc:
+            raise last_exc
+        return ""
 
     def _call_groq(self, prompt: str) -> str:
         try:
