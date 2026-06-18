@@ -50,6 +50,28 @@ _SEVERITY_MAP: dict[str, Severity] = {
 
 _CONFIDENCE_THRESHOLD = 0.50  # Altındaki bulgular atlanır
 
+# Üretim/giriş ayarları
+_MAX_OUTPUT_TOKENS = 2048  # çok bulgulu JSON'un kesilmemesi için
+_TEMPERATURE = 0.2         # düşük → tutarlı, tekrarlanabilir bulgular
+_METIN_SNIPPET_LIMIT = 3000
+
+# Grounding (kanıt doğrulama) — alıntının gerçekten belgede olup olmadığını ölçer.
+# Halüsinasyon alıntıları (modelin uydurduğu metin) programatik olarak elenir.
+_GROUNDING_MIN_LEN = 12     # bu uzunluğun altındaki alıntılar doğrulanmadan geçer
+_GROUNDING_DROP_BELOW = 0.45   # kelime örtüşmesi bunun altındaysa bulgu ELENİR
+_GROUNDING_PENALTY_BELOW = 0.75  # bunun altındaysa confidence düşürülür
+
+# Katman C'nin davranışını yöneten sistem talimatı (rol + ilkeler).
+# Sağlayıcıya system_instruction / system message olarak verilir.
+_SYSTEM_PROMPT = """Sen Türk kamu kurumlarının resmi yazışma standartları konusunda uzman, titiz ve temkinli bir denetçisin. Uzmanlık alanların: Cumhurbaşkanlığı Resmi Yazışma Kılavuzu (2025), GTÜ YÖ-0030 R5 İç Yazışma Yönergesi ve TDK yazım/anlatım kuralları.
+
+ÇALIŞMA İLKELERİN:
+1. KESİNLİK > KAPSAM. Şüphedeysen RAPORLAMA. Hatalı bir uyarı (false positive), kaçırılan küçük bir sorundan daha zararlıdır — kullanıcının sistemine güveni buna bağlı.
+2. KANIT ZORUNLULUĞU. Her bulgu, belgeden BİREBİR alıntılanmış somut bir metne dayanmalı. Alıntılayamıyorsan, o bulgu yok demektir.
+3. SADECE ANLAM/MANTIK. Senin alanın semantik ve mantıksal tutarlılıktır. Noktalama, büyük/küçük harf, boşluk, font gibi BİÇİMSEL sorunlar başka bir katman tarafından ele alınır — bunlara ASLA değinme.
+4. RESMİ DİL NORMU. Resmi yazıların kısa, öz ve kalıplaşmış olması NORMALDİR; bunu eksiklik sayma. Yalnızca anlamı bozan, belirsizlik yaratan veya okuyucuyu yanıltan gerçek sorunları işaretle.
+5. İÇSEL MUHAKEME, SADE ÇIKTI. Önce adım adım düşün; ama çıktın YALNIZCA istenen JSON olsun, muhakemeni yazma."""
+
 
 class LayerC:
     """LLM destekli semantik analiz motoru."""
@@ -166,7 +188,12 @@ class LayerC:
     ) -> list[Finding]:
         prompt = self._build_prompt(doc, metin_text, rag_context or [])
         raw_response = self._call_llm(prompt)
-        return self._parse_llm_response(raw_response)
+        # Grounding için "saman yığını": modelin alıntı yapabileceği tüm belge metni
+        haystack = " ".join(filter(None, [
+            doc.konu, doc.muhatap, metin_text, doc.kapanis_phrase,
+            " ".join(doc.ilgi_list), " ".join(doc.ek_list),
+        ]))
+        return self._parse_llm_response(raw_response, haystack)
 
     def _build_prompt(
         self,
@@ -178,11 +205,16 @@ class LayerC:
         muhatap = doc.muhatap        or "(belirtilmemiş)"
         kapanis = doc.kapanis_phrase or "(belirtilmemiş)"
         ek_str  = "; ".join(doc.ek_list) if doc.ek_list else "(yok)"
+        ilgi_str = "; ".join(doc.ilgi_list) if doc.ilgi_list else "(yok)"
 
-        # Uzun metinleri kırp (token tasarrufu)
-        metin_snippet = metin_text[:2500] if len(metin_text) > 2500 else metin_text
+        # Uzun metinleri kırp (token tasarrufu); cümle bütünlüğünü bozmadan kes
+        metin_snippet = metin_text
+        if len(metin_text) > _METIN_SNIPPET_LIMIT:
+            cut = metin_text[:_METIN_SNIPPET_LIMIT]
+            last_stop = max(cut.rfind(". "), cut.rfind("\n"))
+            metin_snippet = (cut[:last_stop + 1] if last_stop > 1500 else cut) + " […]"
 
-        # RAG bağlamı: ilgili yönerge maddelerini few-shot olarak ekle
+        # RAG bağlamı: ilgili yönerge maddelerini referans olarak ekle
         rag_block = ""
         if rag_context:
             chunks = []
@@ -192,70 +224,65 @@ class LayerC:
                 src  = item.get("metadata", {}).get("source", item.get("metadata", {}).get("source_name", ""))
                 if text and text not in seen_texts and len(text) > 50:
                     seen_texts.add(text)
-                    chunks.append(f"[{src}] {text[:400]}")
+                    chunks.append(f"• [{src}] {text[:400]}")
             if chunks:
                 rag_block = (
-                    "\n\nİLGİLİ YÖNERGİ MADDELERİ (referans olarak kullan):\n"
-                    + "\n---\n".join(chunks)
+                    "\n### İLGİLİ MEVZUAT (yalnızca referans/gerekçe için; bunlar denetlenen belge DEĞİL):\n"
+                    + "\n".join(chunks)
                     + "\n"
                 )
 
-        return f"""Sen Türk resmi yazışma standartları (YÖ-0030 R5, Cumhurbaşkanlığı Yazışma Kılavuzu 2025) konusunda uzman bir denetçisin.{rag_block}
-
-Aşağıdaki resmi yazıyı analiz et:
-
-KONU: {konu}
-MUHATAP: {muhatap}
+        return f"""Aşağıdaki resmi yazıyı 4 semantik kategoride denetle. Önce her kategoriyi içinden adım adım değerlendir, sonra YALNIZCA gerçek sorunları JSON olarak raporla.
+{rag_block}
+### DENETLENEN BELGE
+KONU    : {konu}
+MUHATAP : {muhatap}
+İLGİ    : {ilgi_str}
+EK      : {ek_str}
+KAPANIŞ : {kapanis}
 METİN:
----
+\"\"\"
 {metin_snippet}
----
-KAPANIŞ: {kapanis}
-EK LİSTESİ: {ek_str}
+\"\"\"
 
-Şu 4 kategoride analiz yap:
+### KATEGORİLER VE ÖLÇÜTLER
 
-1. **KONU-METİN UYUMU** (category: "konu_metin")
-   - Konu satırı metnin içeriğini doğru ve yeterince özetliyor mu?
-   - Konu çok muğlak, yanıltıcı ya da fazla genel mi?
-   - Konu ≤3 kelime ise ya da metnin amacını yansıtmıyorsa sorun bildir.
+1. KONU-METİN UYUMU  (category: "konu_metin", genelde severity: "warning")
+   İŞARETLE: Konu, metnin asıl amacını yansıtmıyorsa; yanıltıcıysa; metinde olmayan bir konuyu söylüyorsa; ya da metnin ana talebi konuda hiç geçmiyorsa.
+   İŞARETLEME: Konu kısa ama doğruysa (resmi yazıda kısalık normaldir); konu metni makul özetliyorsa.
 
-2. **MANTIKSAL TUTARLILIK** (category: "mantiksal")
-   - Metinde iç çelişki, belirsiz gönderme ya da eksik bağlam var mı?
-   - Muhatap ile yazının tonu ve içeriği uyuşuyor mu?
-   - Talep veya bildirim açık, eylemlenebilir ve net mi?
+2. MANTIKSAL TUTARLILIK  (category: "mantiksal", severity: "warning"/"error")
+   İŞARETLE: Metin içi çelişki (bir yerde X, başka yerde X-değil); tarih/sayı/miktar çelişkisi; "ilgi"ye veya eke yapılan ama karşılığı olmayan gönderme; muhatabın yapamayacağı bir talep; sonucu belirsiz bırakan eksik bağlam.
+   İŞARETLEME: Bilginin kısa olması; senin dışarıdan bilemeyeceğin varsayımlar.
 
-3. **ANLATIM BOZUKLUKLARI** (category: "anlatim")
-   - Özne-yüklem uyumsuzluğu, sarkık cümle, belirsiz zamir var mı?
-   - Gereksiz edilgen yapı ya da anlam belirsizliği var mı?
-   - Türkçe resmi yazışma diline uymayan ifade, anglisizm veya jargon var mı?
+3. ANLATIM BOZUKLUĞU  (category: "anlatim", genelde severity: "info")
+   İŞARETLE: Özne-yüklem uyumsuzluğu; sarkık/eksik cümle; anlamı bulanıklaştıran belirsiz zamir; cümleyi anlaşılmaz kılan devrik/bozuk kuruluş; resmi dile aykırı argo/anglisizm.
+   İŞARETLEME: Üslup tercihi; "daha güzel olurdu" türü öznel iyileştirmeler; edilgen çatı (resmi dilde olağandır).
 
-4. **BELGE YETERLİLİĞİ** (category: "belge_yeterlilik")
-   - Konuda belirtilen amaç metinde yeterince açıklanmış mı?
-   - Gerekli bilgiler (tarih, süre, adet, gerekçe vb.) eksiksiz mi?
-   - Okuyucu bu yazıdan sonra ne yapacağını anlayabiliyor mu?
+4. BELGE YETERLİLİĞİ  (category: "belge_yeterlilik", genelde severity: "info")
+   İŞARETLE: Bir TALEP/işlem var ama onu uygulamak için zorunlu bilgi eksik (örn. tarih, süre, adet, kişi, gerekçe belirtilmeden onay/işlem isteniyor).
+   İŞARETLEME: Salt bilgilendirme yazısının "eksik" sayılması; tahmini eksiklikler.
 
-KURALLAR:
-- YALNIZCA gerçek ve belgeye özgü somut sorunları raporla. Genel gözlem yapma.
-- Her bulguda sorunlu metni doğrudan alıntıla ("found_text" alanına koy).
-- "anlatim" ve "konu_metin" kategorilerinde mümkünse yeniden yazılmış öneri sun ("suggested_text").
-- Sorun yoksa boş JSON dizisi `[]` döndür.
-- Noktalama, büyük/küçük harf, font gibi biçimsel sorunları RAPORLAMA.
-- confidence: 0.55–1.0 arası gerçekçi değer; 0.55 altını EKLEME.
+### ÇIKTI KURALLARI (kesin)
+- Her bulgunun "found_text" alanı, METİN bölümünden BİREBİR (kelimesi kelimesine) kopyalanmış bir parça olmalı. Uydurma/parafraz YASAK — alıntılayamadığın bulguyu hiç yazma.
+- Biçimsel sorunlara (noktalama, büyük harf, boşluk, font) DEĞİNME.
+- Aynı sorunu iki kez yazma. En fazla 6 bulgu.
+- Gerçek sorun yoksa: {{"findings": []}}
+- confidence: gerçekçi ver. Çok eminsen 0.85–0.95; makul şüphedeysen 0.6–0.8; 0.55 altını EKLEME.
 
-SADECE aşağıdaki JSON dizisini döndür, başka metin ekleme:
-[
-  {{
-    "category": "konu_metin" | "mantiksal" | "anlatim" | "belge_yeterlilik",
-    "severity": "error" | "warning" | "info",
-    "title": "Kısa başlık (≤70 karakter)",
-    "description": "Sorunun somut açıklaması — hangi metin, neden sorunlu",
-    "found_text": "Sorunlu metnin alıntısı (varsa, ≤120 karakter)",
-    "suggestion": "Nasıl düzeltilmeli — genel tavsiye",
-    "suggested_text": "Yeniden yazılmış metin önerisi (yalnızca anlatim/konu_metin; yoksa null)",
-    "confidence": 0.75
-  }}
-]"""
+### ÖRNEKLER
+
+Örnek A — konu "İzin Talebi", metin tamamen bütçe ek ödeneğinden bahsediyor:
+{{"findings": [{{"category": "konu_metin", "severity": "warning", "title": "Konu metnin içeriğiyle örtüşmüyor", "description": "Konu 'İzin Talebi' iken metin yıllık ek bütçe ödeneği talebini anlatıyor; konu metnin amacını yansıtmıyor.", "found_text": "2025 yılı laboratuvar giderleri için ek ödenek talep edilmektedir", "suggestion": "Konu satırını metnin gerçek amacıyla eşleştirin.", "suggested_text": "Ek Ödenek Talebi", "confidence": 0.9}}]}}
+
+Örnek B — temiz, tutarlı bir yazı:
+{{"findings": []}}
+
+### YANIT FORMATI
+SADECE şu yapıda geçerli JSON döndür (başka metin yok):
+{{"findings": [
+  {{"category": "konu_metin|mantiksal|anlatim|belge_yeterlilik", "severity": "error|warning|info", "title": "≤70 karakter", "description": "somut açıklama: hangi metin, neden sorunlu", "found_text": "metinden birebir alıntı (≤140 karakter)", "suggestion": "kısa düzeltme tavsiyesi", "suggested_text": "yeniden yazım önerisi (yalnızca anlatim/konu_metin; yoksa null)", "confidence": 0.8}}
+]}}"""
 
     def _call_llm(self, prompt: str) -> str:
         if self.provider == "gemini":
@@ -275,17 +302,23 @@ SADECE aşağıdaki JSON dizisini döndür, başka metin ekleme:
         if self._client is None:
             self._client = Groq(api_key=self.api_key)
 
+        # JSON mode: response_format ile geçerli JSON garanti edilir → parse hatası olmaz.
         completion = self._client.chat.completions.create(
             model=self.model,
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=1024,
-            temperature=0.3,
+            messages=[
+                {"role": "system", "content": _SYSTEM_PROMPT},
+                {"role": "user", "content": prompt},
+            ],
+            max_tokens=_MAX_OUTPUT_TOKENS,
+            temperature=_TEMPERATURE,
+            response_format={"type": "json_object"},
         )
         return completion.choices[0].message.content
 
     def _call_gemini(self, prompt: str) -> str:
         try:
             from google import genai
+            from google.genai import types
         except ImportError as exc:
             raise RuntimeError(
                 "google-genai paketi kurulu değil. Yüklemek için: pip install google-genai"
@@ -294,47 +327,69 @@ SADECE aşağıdaki JSON dizisini döndür, başka metin ekleme:
         if self._client is None:
             self._client = genai.Client(api_key=self.api_key)
 
+        # JSON mode + system instruction + düşük sıcaklık → tutarlı, geçerli JSON.
         response = self._client.models.generate_content(
             model=self.model,
             contents=prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=_SYSTEM_PROMPT,
+                temperature=_TEMPERATURE,
+                max_output_tokens=_MAX_OUTPUT_TOKENS,
+                response_mime_type="application/json",
+            ),
         )
         return response.text
 
     # ── LLM yanıtı ayrıştırma ───────────────────────────────────────────────
 
-    def _parse_llm_response(self, raw: str) -> list[Finding]:
-        """LLM JSON yanıtını Finding listesine dönüştürür."""
-        # Yanıt içindeki JSON dizisini bul (```json ... ``` bloğu veya düz)
-        json_match = re.search(r"\[.*?\]", raw, re.DOTALL)
-        if not json_match:
+    def _parse_llm_response(self, raw: str, haystack: str = "") -> list[Finding]:
+        """LLM JSON yanıtını Finding listesine dönüştürür ve kanıt doğrulaması yapar."""
+        items = _extract_findings(raw)
+        if items is None:
             logger.warning("Katman C: LLM yanıtından JSON çıkarılamadı — yanıt: %s", raw[:300])
             return []
 
-        try:
-            items: list[dict] = json.loads(json_match.group(0))
-        except json.JSONDecodeError as exc:
-            logger.warning("Katman C: JSON ayrıştırma hatası: %s", exc)
-            return []
+        norm_haystack = _normalize_for_match(haystack)
 
         findings: list[Finding] = []
+        seen_keys: set[str] = set()
         for item in items:
             if not isinstance(item, dict):
                 continue
 
-            confidence = float(item.get("confidence", 0.7))
-            if confidence < _CONFIDENCE_THRESHOLD:
-                continue
+            confidence = _coerce_confidence(item.get("confidence", 0.7))
 
             category  = item.get("category", "mantiksal")
             rule_code = _RULE_CODE_MAP.get(category, "SEM-003")
-            severity  = _SEVERITY_MAP.get(item.get("severity", "warning"), Severity.WARNING)
+            severity  = _SEVERITY_MAP.get(str(item.get("severity", "warning")).lower(), Severity.WARNING)
 
             # found_text → found alanına; suggested_text → ayrı alan
-            found_text = item.get("found_text") or None
-            suggested  = item.get("suggested_text") or None
-            # null/boş string'leri temizle
-            if suggested and len(suggested.strip()) < 5:
+            found_text = (item.get("found_text") or "").strip() or None
+            suggested  = (item.get("suggested_text") or "").strip() or None
+            if suggested and len(suggested) < 5:
                 suggested = None
+
+            # ── GROUNDING: alıntı gerçekten belgede var mı? ──
+            # Halüsinasyon alıntıları ele; zayıf eşleşmelerde confidence düşür.
+            if found_text and len(found_text) >= _GROUNDING_MIN_LEN and norm_haystack:
+                overlap = _quote_overlap(found_text, norm_haystack)
+                if overlap < _GROUNDING_DROP_BELOW:
+                    logger.info(
+                        "Katman C: kanıtsız bulgu elendi (örtüşme=%.2f) — '%s'",
+                        overlap, found_text[:60],
+                    )
+                    continue
+                if overlap < _GROUNDING_PENALTY_BELOW:
+                    confidence = min(confidence, 0.6)
+
+            if confidence < _CONFIDENCE_THRESHOLD:
+                continue
+
+            # Yinelenen bulguları (aynı kategori + aynı alıntı) ele
+            dedup_key = f"{category}|{(found_text or item.get('title',''))[:80].lower()}"
+            if dedup_key in seen_keys:
+                continue
+            seen_keys.add(dedup_key)
 
             reference = _CATEGORY_REFERENCES.get(
                 category,
@@ -351,10 +406,95 @@ SADECE aşağıdaki JSON dizisini döndür, başka metin ekleme:
                 suggestion=item.get("suggestion"),
                 suggested_text=suggested,
                 reference=reference,
-                confidence=confidence,
+                confidence=round(confidence, 2),
             ))
 
         return findings
+
+
+# ── Yanıt ayrıştırma & kanıt doğrulama yardımcıları (modül seviyesi) ──────────
+
+def _extract_findings(raw: str) -> list | None:
+    """
+    LLM yanıtından bulgu listesini çıkarır. Şu biçimleri destekler:
+      • {"findings": [...]}        (JSON mode birincil format)
+      • [...]                       (düz dizi — geriye dönük uyum)
+      • ```json ... ``` bloğu içinde gömülü
+    Çıkaramazsa None döner.
+    """
+    if not raw:
+        return None
+    text = raw.strip()
+
+    # Önce doğrudan JSON dene
+    for candidate in (text,):
+        try:
+            obj = json.loads(candidate)
+            if isinstance(obj, dict) and isinstance(obj.get("findings"), list):
+                return obj["findings"]
+            if isinstance(obj, list):
+                return obj
+        except json.JSONDecodeError:
+            pass
+
+    # Gömülü nesne {...} veya dizi [...] ara (greedy — kesilmeyi önler)
+    obj_match = re.search(r"\{.*\}", text, re.DOTALL)
+    if obj_match:
+        try:
+            obj = json.loads(obj_match.group(0))
+            if isinstance(obj, dict) and isinstance(obj.get("findings"), list):
+                return obj["findings"]
+        except json.JSONDecodeError:
+            pass
+
+    arr_match = re.search(r"\[.*\]", text, re.DOTALL)
+    if arr_match:
+        try:
+            arr = json.loads(arr_match.group(0))
+            if isinstance(arr, list):
+                return arr
+        except json.JSONDecodeError:
+            pass
+
+    return None
+
+
+def _coerce_confidence(value: Any) -> float:
+    """confidence'ı 0.0–1.0 aralığında güvenli float'a çevirir."""
+    try:
+        c = float(value)
+    except (TypeError, ValueError):
+        return 0.7
+    if c > 10.0:       # model 0–100 ölçeği verdiyse (ör. 90) normalize et
+        c = c / 100.0
+    return max(0.0, min(1.0, c))
+
+
+def _normalize_for_match(text: str) -> str:
+    """Eşleştirme için metni sadeleştirir: küçük harf + tek boşluk + noktalama yok."""
+    if not text:
+        return ""
+    lowered = text.casefold()
+    # noktalama ve fazla boşlukları tek boşluğa indir
+    return re.sub(r"[^\wçğıöşüâîû]+", " ", lowered, flags=re.UNICODE).strip()
+
+
+def _quote_overlap(found_text: str, norm_haystack: str) -> float:
+    """
+    Alıntının belgede ne kadar geçtiğini ölçer (0.0–1.0).
+    Önce birebir alt-dize kontrolü; değilse anlamlı kelimelerin örtüşme oranı.
+    """
+    norm_quote = _normalize_for_match(found_text)
+    if not norm_quote:
+        return 1.0  # alıntı yoksa grounding uygulanmaz
+    if norm_quote in norm_haystack:
+        return 1.0
+    words = [w for w in norm_quote.split() if len(w) > 2]
+    if not words:
+        return 1.0
+    hay_words = set(norm_haystack.split())
+    hits = sum(1 for w in words if w in hay_words)
+    return hits / len(words)
 
 
 # ── Config dosyası yardımcıları (modül seviyesi) ──────────────────────────────
